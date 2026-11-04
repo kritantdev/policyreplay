@@ -1,0 +1,7 @@
+.git
+.venv
+runs
+__pycache__
+*.pyc
+dashboard
+node_modules

@@ -1,0 +1,149 @@
+"""Disposable e-commerce target app for PolicyReplay (synthetic data only).
+
+BUG_PROFILE=correct : enforces P-01 (refund > 10000 INR needs manager approval)
+BUG_PROFILE=buggy   : planted bug, skips the approval check
+Same code, same image; only the env flag differs.
+Threshold semantics: strictly greater than 10000 needs approval; exactly 10000 does not.
+"""
+import os
+import sqlite3
+from pathlib import Path
+
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+THRESHOLD = 10000
+BASE = Path(__file__).parent
+
+SCHEMA = """
+CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE, role TEXT);
+CREATE TABLE orders(id INTEGER PRIMARY KEY, customer_id INTEGER, total INTEGER, status TEXT);
+CREATE TABLE refunds(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
+                     issued_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE approvals(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
+                       requested_by INTEGER, approved_by INTEGER, status TEXT DEFAULT 'pending');
+"""
+SEED_USERS = [(1, "support1", "support"), (2, "manager1", "manager"), (3, "admin1", "admin"),
+              (4, "alice", "customer"), (5, "bob", "customer")]
+SEED_ORDERS = [(1001, 4, 20000, "delivered"), (1002, 5, 8000, "delivered")]
+
+
+def create_app(profile=None, db_path=None):
+    profile = profile or os.environ.get("BUG_PROFILE", "correct")
+    db_path = db_path or os.environ.get("DB_PATH", "/tmp/app.db")
+    if profile not in ("correct", "buggy"):
+        raise ValueError("BUG_PROFILE must be 'correct' or 'buggy'")
+    Path(db_path).unlink(missing_ok=True)
+    con = sqlite3.connect(db_path, check_same_thread=False)
+    con.row_factory = sqlite3.Row
+    con.executescript(SCHEMA)
+    con.executemany("INSERT INTO users VALUES(?,?,?)", SEED_USERS)
+    con.executemany("INSERT INTO orders VALUES(?,?,?,?)", SEED_ORDERS)
+    con.commit()
+
+    app = FastAPI(title="Target Shop")
+    tpl = Jinja2Templates(directory=str(BASE / "templates"))
+
+    def me(request):
+        name = request.cookies.get("user")
+        return con.execute("SELECT * FROM users WHERE username=?", (name,)).fetchone() if name else None
+
+    def order_page(request, user, order_id, flash=None, kind=None, status=200):
+        order = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        refunds = con.execute("SELECT * FROM refunds WHERE order_id=?", (order_id,)).fetchall()
+        approvals = con.execute("SELECT * FROM approvals WHERE order_id=?", (order_id,)).fetchall()
+        return tpl.TemplateResponse(request, "order.html", dict(
+            user=user, order=order, refunds=refunds, approvals=approvals,
+            flash=flash, kind=kind), status_code=status)
+
+    @app.get("/health")
+    def health():
+        return {"ok": True, "profile": profile}
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_form(request: Request):
+        return tpl.TemplateResponse(request, "login.html", dict(user=None, error=None))
+
+    @app.post("/login")
+    def login(request: Request, username: str = Form(...)):
+        u = con.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        if not u:
+            return tpl.TemplateResponse(request, "login.html",
+                                        dict(user=None, error="Unknown user"), status_code=401)
+        r = RedirectResponse("/orders", status_code=303)
+        r.set_cookie("user", username)
+        return r
+
+    @app.get("/orders", response_class=HTMLResponse)
+    def orders(request: Request):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        rows = con.execute("SELECT * FROM orders").fetchall()
+        return tpl.TemplateResponse(request, "orders.html", dict(user=u, orders=rows))
+
+    @app.get("/orders/{order_id}", response_class=HTMLResponse)
+    def order(request: Request, order_id: int):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        return order_page(request, u, order_id)
+
+    @app.post("/orders/{order_id}/refund", response_class=HTMLResponse)
+    def refund(request: Request, order_id: int, amount: int = Form(...)):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        if u["role"] not in ("support", "manager", "admin"):
+            return order_page(request, u, order_id, "Not allowed", "error", 403)
+        o = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not o or amount <= 0 or amount > o["total"]:
+            return order_page(request, u, order_id, "Invalid refund amount", "error", 400)
+        if profile == "correct" and amount > THRESHOLD:
+            ok = con.execute("SELECT 1 FROM approvals WHERE order_id=? AND status='approved' "
+                             "AND amount>=?", (order_id, amount)).fetchone()
+            if not ok:
+                return order_page(request, u, order_id,
+                                  "Manager approval required for refunds above 10000", "error", 403)
+        con.execute("INSERT INTO refunds(order_id, amount, issued_by) VALUES(?,?,?)",
+                    (order_id, amount, u["id"]))
+        con.commit()
+        return order_page(request, u, order_id, f"Refund of {amount} issued", "success")
+
+    @app.post("/orders/{order_id}/approval-request", response_class=HTMLResponse)
+    def approval_request(request: Request, order_id: int, amount: int = Form(...)):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        if u["role"] != "support":
+            return order_page(request, u, order_id, "Only support can request approval", "error", 403)
+        con.execute("INSERT INTO approvals(order_id, amount, requested_by) VALUES(?,?,?)",
+                    (order_id, amount, u["id"]))
+        con.commit()
+        return order_page(request, u, order_id, "Approval requested", "success")
+
+    @app.get("/approvals", response_class=HTMLResponse)
+    def approvals(request: Request):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        if u["role"] != "manager":
+            return HTMLResponse("Forbidden", status_code=403)
+        rows = con.execute("SELECT * FROM approvals").fetchall()
+        return tpl.TemplateResponse(request, "approvals.html", dict(user=u, approvals=rows))
+
+    @app.post("/approvals/{approval_id}/approve")
+    def approve(request: Request, approval_id: int):
+        u = me(request)
+        if not u or u["role"] != "manager":
+            return HTMLResponse("Forbidden", status_code=403)
+        con.execute("UPDATE approvals SET status='approved', approved_by=? WHERE id=?",
+                    (u["id"], approval_id))
+        con.commit()
+        return RedirectResponse("/approvals", status_code=303)
+
+    return app
+
+
+app = create_app() if os.environ.get("PR_AUTOSTART", "1") == "1" else None

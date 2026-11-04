@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block body %}<h1>Orders</h1>
+<table>{% for o in orders %}<tr data-testid="order-row-{{ o.id }}">
+<td><a data-testid="order-link-{{ o.id }}" href="/orders/{{ o.id }}">#{{ o.id }}</a></td>
+<td>{{ o.total }} INR</td><td>{{ o.status }}</td></tr>{% endfor %}</table>{% endblock %}

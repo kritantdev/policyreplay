@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block body %}<h1>Approvals</h1>
+{% for a in approvals %}<form method="post" action="/approvals/{{ a.id }}/approve" data-testid="approval-{{ a.id }}">
+Order {{ a.order_id }}: {{ a.amount }} INR ({{ a.status }})
+<button data-testid="approve-{{ a.id }}" type="submit">Approve</button></form>{% endfor %}{% endblock %}

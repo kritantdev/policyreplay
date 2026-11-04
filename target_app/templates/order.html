@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block body %}
+<h1>Order #{{ order.id }}</h1>
+<p data-testid="order-total">{{ order.total }}</p><p data-testid="order-status">{{ order.status }}</p>
+{% if flash %}<p data-testid="{{ 'flash-success' if kind == 'success' else 'error' }}">{{ flash }}</p>{% endif %}
+<h2>Refunds</h2>
+{% for r in refunds %}<p data-testid="refund-row">{{ r.amount }} INR</p>{% endfor %}
+<form method="post" action="/orders/{{ order.id }}/refund">
+<input data-testid="refund-amount" name="amount">
+<button data-testid="refund-submit" type="submit">Issue refund</button></form>
+<h2>Approvals</h2>
+{% for a in approvals %}<p data-testid="approval-row">{{ a.amount }} INR: {{ a.status }}</p>{% endfor %}
+<form method="post" action="/orders/{{ order.id }}/approval-request">
+<input data-testid="approval-amount" name="amount">
+<button data-testid="approval-request-submit" type="submit">Request approval</button></form>
+{% endblock %}

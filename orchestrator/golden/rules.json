@@ -1,0 +1,27 @@
+{
+  "rules": [
+    {
+      "rule_id": "P-01",
+      "source_clause": "Refunds above INR 10,000 require manager approval.",
+      "actor": "support",
+      "action": "issue_refund",
+      "params": {
+        "threshold": 10000
+      },
+      "invariant_type": "approval_required_over_threshold"
+    },
+    {
+      "rule_id": "P-05",
+      "source_clause": "Customers cannot access another customer's order.",
+      "actor": "customer",
+      "action": "view_order",
+      "params": {},
+      "invariant_type": "owner_only_access"
+    }
+  ],
+  "unsupported_clauses": [
+    "Only administrators can modify user roles.",
+    "Shipped orders cannot be cancelled.",
+    "Discounts cannot exceed 30%."
+  ]
+}

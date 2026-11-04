@@ -1,0 +1,7 @@
+ACME STORE OPERATIONS POLICY (v1)
+
+1. Refunds (P-01). Refunds above INR 10,000 require manager approval. Support staff may issue smaller refunds directly.
+2. Roles (P-02). Only administrators can modify user roles.
+3. Orders (P-03). Shipped orders cannot be cancelled.
+4. Discounts (P-04). Discounts cannot exceed 30%.
+5. Privacy (P-05). Customers cannot access another customer's order.

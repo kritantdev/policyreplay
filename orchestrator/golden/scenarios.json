@@ -1,0 +1,94 @@
+{
+  "scenarios": [
+    {
+      "test_id": "P-01-ADV-001",
+      "rule_id": "P-01",
+      "actor_role": "support",
+      "preconditions": {
+        "order_id": 1001,
+        "approval_state": "none"
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "support"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1001"
+        },
+        {
+          "action": "expect",
+          "testid": "order-total",
+          "text": "20000"
+        },
+        {
+          "action": "fill",
+          "testid": "refund-amount",
+          "value": "15000"
+        },
+        {
+          "action": "click",
+          "testid": "refund-submit"
+        }
+      ],
+      "expected_outcome": "blocked",
+      "invariant_type": "approval_required_over_threshold"
+    },
+    {
+      "test_id": "P-01-BND-001",
+      "rule_id": "P-01",
+      "actor_role": "support",
+      "preconditions": {
+        "order_id": 1001,
+        "approval_state": "none"
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "support"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1001"
+        },
+        {
+          "action": "expect",
+          "testid": "order-total",
+          "text": "20000"
+        },
+        {
+          "action": "fill",
+          "testid": "refund-amount",
+          "value": "10000"
+        },
+        {
+          "action": "click",
+          "testid": "refund-submit"
+        }
+      ],
+      "expected_outcome": "allowed",
+      "invariant_type": "approval_required_over_threshold"
+    },
+    {
+      "test_id": "P-05-ADV-001",
+      "rule_id": "P-05",
+      "actor_role": "customer",
+      "preconditions": {
+        "order_id": 1002
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "customer"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1002"
+        }
+      ],
+      "expected_outcome": "blocked",
+      "invariant_type": "owner_only_access"
+    }
+  ]
+}

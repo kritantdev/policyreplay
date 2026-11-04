@@ -4,6 +4,8 @@ BUG_PROFILE=correct : enforces P-01 (refund > 10000 INR needs manager approval)
 BUG_PROFILE=buggy   : planted bug, skips the approval check
 Same code, same image; only the env flag differs.
 Threshold semantics: strictly greater than 10000 needs approval; exactly 10000 does not.
+P-05 planted bug (buggy only): GET /orders/{id} skips the ownership check (direct-URL access).
+Every order page view is recorded in order_views with the HTTP status actually returned.
 """
 import os
 import sqlite3
@@ -23,6 +25,8 @@ CREATE TABLE refunds(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amo
                      issued_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE approvals(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
                        requested_by INTEGER, approved_by INTEGER, status TEXT DEFAULT 'pending');
+CREATE TABLE order_views(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, order_id INTEGER,
+                         status INTEGER, viewed_at TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 SEED_USERS = [(1, "support1", "support"), (2, "manager1", "manager"), (3, "admin1", "admin"),
               (4, "alice", "customer"), (5, "bob", "customer")]
@@ -49,8 +53,12 @@ def create_app(profile=None, db_path=None):
         name = request.cookies.get("user")
         return con.execute("SELECT * FROM users WHERE username=?", (name,)).fetchone() if name else None
 
-    def order_page(request, user, order_id, flash=None, kind=None, status=200):
+    def order_page(request, user, order_id, flash=None, kind=None, status=200, enforce_owner=True):
         order = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        if order is None:
+            return HTMLResponse('<p data-testid="error">Not found</p>', status_code=404)
+        if enforce_owner and user["role"] == "customer" and order["customer_id"] != user["id"]:
+            return HTMLResponse('<p data-testid="error">Forbidden</p>', status_code=403)
         refunds = con.execute("SELECT * FROM refunds WHERE order_id=?", (order_id,)).fetchall()
         approvals = con.execute("SELECT * FROM approvals WHERE order_id=?", (order_id,)).fetchall()
         return tpl.TemplateResponse(request, "order.html", dict(
@@ -80,7 +88,10 @@ def create_app(profile=None, db_path=None):
         u = me(request)
         if not u:
             return RedirectResponse("/login", status_code=303)
-        rows = con.execute("SELECT * FROM orders").fetchall()
+        if u["role"] == "customer":
+            rows = con.execute("SELECT * FROM orders WHERE customer_id=?", (u["id"],)).fetchall()
+        else:
+            rows = con.execute("SELECT * FROM orders").fetchall()
         return tpl.TemplateResponse(request, "orders.html", dict(user=u, orders=rows))
 
     @app.get("/orders/{order_id}", response_class=HTMLResponse)
@@ -88,7 +99,13 @@ def create_app(profile=None, db_path=None):
         u = me(request)
         if not u:
             return RedirectResponse("/login", status_code=303)
-        return order_page(request, u, order_id)
+        # P-05 planted bug: the buggy build does not enforce ownership on this route.
+        resp = order_page(request, u, order_id, enforce_owner=(profile == "correct"))
+        if con.execute("SELECT 1 FROM orders WHERE id=?", (order_id,)).fetchone():
+            con.execute("INSERT INTO order_views(user_id, order_id, status) VALUES(?,?,?)",
+                        (u["id"], order_id, resp.status_code))
+            con.commit()
+        return resp
 
     @app.post("/orders/{order_id}/refund", response_class=HTMLResponse)
     def refund(request: Request, order_id: int, amount: int = Form(...)):

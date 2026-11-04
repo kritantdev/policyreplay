@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from verifier.make_fixtures import RULE, scenario_dict, snapshot  # noqa: E402
+from verifier.make_fixtures import RULE, RULE_P05, scenario_dict, scenario_dict_p05, snapshot  # noqa: E402
 from verifier.verify import verify  # noqa: E402
 
 
@@ -26,7 +26,12 @@ def free_port():
         return s.getsockname()[1]
 
 
-def run(name, profile, amount, outdir, no_sandbox=False):
+CASES = [("P-01", "buggy_15000", "buggy", 15000), ("P-01", "correct_15000", "correct", 15000),
+         ("P-01", "correct_10000", "correct", 10000),
+         ("P-05", "buggy_p05", "buggy", None), ("P-05", "correct_p05", "correct", None)]
+
+
+def run(policy, name, profile, amount, outdir, no_sandbox=False):
     out = Path(outdir) / name
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
@@ -44,8 +49,8 @@ def run(name, profile, amount, outdir, no_sandbox=False):
         else:
             raise RuntimeError("target app did not start")
         snapshot(live, out / "pre.db")
-        sc = scenario_dict(name, amount)
-        (out / "rule.json").write_text(json.dumps(RULE, indent=2))
+        sc = scenario_dict(name, amount) if policy == "P-01" else scenario_dict_p05(name)
+        (out / "rule.json").write_text(json.dumps(RULE if policy == "P-01" else RULE_P05, indent=2))
         (out / "scenario.json").write_text(json.dumps(sc, indent=2))
         (out / "plan.json").write_text(json.dumps(sc["steps"]))
         cmd = [sys.executable, "-m", "worker.run_plan", "--base-url", f"http://127.0.0.1:{port}",
@@ -70,7 +75,6 @@ if __name__ == "__main__":
     ap.add_argument("--no-sandbox", action="store_true",
                     default=os.environ.get("PR_NO_SANDBOX") == "1")
     a = ap.parse_args()
-    for name, profile, amount in [("buggy_15000", "buggy", 15000), ("correct_15000", "correct", 15000),
-                                  ("correct_10000", "correct", 10000)]:
-        r = run(name, profile, amount, ROOT / "runs" / "e2e", a.no_sandbox)
+    for policy, name, profile, amount in CASES:
+        r = run(policy, name, profile, amount, ROOT / "runs" / "e2e", a.no_sandbox)
         print(f"{name:15} {r['verdict']:12} {r['reasons'][0]}")

@@ -111,3 +111,69 @@ def approval_required_over_threshold(rule, scenario, pre, post, http_log):
                       [f"refund of {amount} is at or below {threshold}; allowed, no approval needed"],
                       checks, observed)
     return _inc("boundary attempt did not produce the expected allowed state", checks, observed)
+
+
+FOREIGN_VIEWS = """
+SELECT v.id, v.user_id, v.order_id, v.status FROM order_views v
+JOIN users u ON u.id = v.user_id
+JOIN orders o ON o.id = v.order_id
+WHERE u.role = 'customer' AND o.customer_id != v.user_id AND v.status = 200
+"""
+
+
+def owner_only_access(rule, scenario, pre, post, http_log):
+    """P-05. A customer must never be served another customer's order.
+
+    Evidence is two independent sources that must agree: the browser-observed HTTP
+    status for GET /orders/<id>, and the app's order_views audit table (fixed SQL).
+    Limitation: the audit table is maintained by the app under test.
+    """
+    try:
+        order_id = int(scenario.preconditions["order_id"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("scenario order_id missing or not an integer")
+
+    checks, observed = {}, {}
+    try:
+        owner = pre.execute("SELECT u.id, u.role FROM orders o JOIN users u ON u.id=o.customer_id "
+                            "WHERE o.id=?", (order_id,)).fetchone()
+        customers = pre.execute("SELECT COUNT(*) FROM users WHERE role='customer'").fetchone()[0]
+        pre_ids = {r[0] for r in pre.execute(FOREIGN_VIEWS)}
+    except sqlite3.Error as e:
+        return _inc(f"pre-run snapshot unreadable: {e}")
+    checks["precondition_order_exists"] = owner is not None
+    checks["precondition_owner_is_customer"] = bool(owner) and owner[1] == "customer"
+    checks["precondition_other_customer_exists"] = customers >= 2
+    if not all(checks.values()):
+        return _inc("seed state does not match scenario preconditions", checks)
+
+    attempts = [e for e in http_log
+                if e.get("method") == "GET" and e.get("path") == f"/orders/{order_id}"]
+    checks["attempt_logged"] = bool(attempts)
+    if not attempts:
+        return _inc("order access attempt not found in HTTP log", checks)
+    try:
+        status = int(attempts[-1]["status"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("attempt log entry has no usable status", checks)
+    observed["attempt"] = {"path": f"/orders/{order_id}", "status": status}
+
+    try:
+        post_rows = post.execute(FOREIGN_VIEWS).fetchall()
+    except sqlite3.Error as e:
+        return _inc(f"post-run snapshot unreadable: {e}", checks, observed)
+    new = [list(r) for r in post_rows if r[0] not in pre_ids and r[2] == order_id]
+    observed["new_foreign_views"] = new
+
+    if new and status == 200:
+        checks["invariant_upheld"] = False
+        return Result("VIOLATION", [f"a customer who does not own order {order_id} was served it (HTTP 200) "
+                                    f"and the audit log recorded the access"], checks, observed)
+    if new:
+        return _inc("audit log shows foreign access but the HTTP log does not show a 200", checks, observed)
+    if status in (401, 403, 404):
+        checks.update(attempt_blocked=True, invariant_upheld=True)
+        return Result("PASS", [f"access to order {order_id} was blocked (HTTP {status}) and no foreign "
+                               f"view was served"], checks, observed)
+    return _inc("page was served but no foreign-customer access is recorded; the scenario did not "
+                "exercise a non-owner customer", checks, observed)

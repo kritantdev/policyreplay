@@ -11,10 +11,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .registry import Result, approval_required_over_threshold
+from .registry import Result, approval_required_over_threshold, owner_only_access
 from .schemas import Rule, Scenario
 
-REGISTRY = {"approval_required_over_threshold": approval_required_over_threshold}
+REGISTRY = {"approval_required_over_threshold": approval_required_over_threshold,
+            "owner_only_access": owner_only_access}
 
 
 def sha256(path):

@@ -53,3 +53,41 @@ def test_correct_allows_after_manager_approval(tmp_path):
 def test_customer_cannot_refund(tmp_path):
     c, _ = client("buggy", tmp_path, "alice")
     assert c.post("/orders/1001/refund", data={"amount": 500}).status_code == 403
+
+
+# ---- P-05 (access control) ----
+def _views(db):
+    return sqlite3.connect(db).execute("SELECT user_id, order_id, status FROM order_views").fetchall()
+
+
+def test_p05_buggy_serves_other_customers_order(tmp_path):
+    c, db = client("buggy", tmp_path, "alice")
+    assert c.get("/orders/1002").status_code == 200       # bob's order
+    assert _views(db) == [(4, 1002, 200)]
+
+
+def test_p05_correct_blocks_other_customers_order(tmp_path):
+    c, db = client("correct", tmp_path, "alice")
+    r = c.get("/orders/1002")
+    assert r.status_code == 403 and "8000" not in r.text
+    assert _views(db) == [(4, 1002, 403)]
+
+
+def test_p05_customer_can_view_own_order_and_list_is_filtered(tmp_path):
+    for p in ("correct", "buggy"):
+        c, _ = client(p, tmp_path, "alice")
+        assert c.get("/orders/1001").status_code == 200
+        lst = c.get("/orders").text
+        assert "order-row-1001" in lst and "order-row-1002" not in lst
+
+
+def test_p05_staff_can_view_any_order(tmp_path):
+    c, _ = client("correct", tmp_path, "support1")
+    assert c.get("/orders/1002").status_code == 200
+
+
+def test_p05_post_pages_never_leak_other_customers_order(tmp_path):
+    for p in ("correct", "buggy"):
+        c, _ = client(p, tmp_path, "alice")
+        r = c.post("/orders/1002/refund", data={"amount": 100})
+        assert r.status_code == 403 and "8000" not in r.text

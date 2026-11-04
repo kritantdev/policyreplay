@@ -15,6 +15,22 @@ RULE = {"rule_id": "P-01", "source_clause": "Refunds above INR 10000 require man
         "invariant_type": "approval_required_over_threshold"}
 
 
+ORDER_TOTALS = {1001: 20000}
+
+
+def scenario_dict(name, amount, order_id=1001):
+    """The compiled scenario (steps use only the fixed action vocabulary)."""
+    return {"test_id": f"P-01-{name}", "rule_id": "P-01", "actor_role": "support",
+            "preconditions": {"order_id": order_id, "approval_state": "none"},
+            "steps": [{"action": "login", "role": "support"},
+                      {"action": "goto", "path": f"/orders/{order_id}"},
+                      {"action": "expect", "testid": "order-total", "text": str(ORDER_TOTALS[order_id])},
+                      {"action": "fill", "testid": "refund-amount", "value": str(amount)},
+                      {"action": "click", "testid": "refund-submit"}],
+            "expected_outcome": "blocked" if amount > 10000 else "allowed",
+            "invariant_type": "approval_required_over_threshold"}
+
+
 def snapshot(src, dst):
     Path(dst).unlink(missing_ok=True)
     s, d = sqlite3.connect(src), sqlite3.connect(dst)
@@ -42,15 +58,7 @@ def make(name, profile, amount, outdir, order_id=1001):
         {"method": "POST", "path": f"/orders/{order_id}/refund",
          "form": {"amount": str(amount)}, "status": r.status_code}], indent=2))
     (out / "rule.json").write_text(json.dumps(RULE, indent=2))
-    (out / "scenario.json").write_text(json.dumps({
-        "test_id": f"P-01-{name}", "rule_id": "P-01", "actor_role": "support",
-        "preconditions": {"order_id": order_id, "approval_state": "none"},
-        "steps": [{"action": "login", "role": "support"},
-                  {"action": "goto", "path": f"/orders/{order_id}"},
-                  {"action": "fill", "testid": "refund-amount", "value": str(amount)},
-                  {"action": "click", "testid": "refund-submit"}],
-        "expected_outcome": "blocked" if amount > 10000 else "allowed",
-        "invariant_type": "approval_required_over_threshold"}, indent=2))
+    (out / "scenario.json").write_text(json.dumps(scenario_dict(name, amount, order_id), indent=2))
     return out
 
 

@@ -181,31 +181,34 @@ def _golden(name):
 
 
 def extract_rules(policy_text, transport=None, replay=False):
+    reason = "replay requested" if replay else "model not configured"
     msgs = [{"role": "system", "content": RULES_PROMPT}, {"role": "user", "content": policy_text}]
     if not replay and (transport or configured()):
         try:
             res = chat_json(msgs, lambda o: _parse_rules(o, policy_text), transport)
-            return {**res, "source": MODEL}
-        except LLMError:
-            pass
+            return {**res, "source": MODEL, "fallback_reason": None}
+        except LLMError as e:
+            reason = str(e)
     try:
         res = _parse_rules(_golden("rules.json"), policy_text)
     except ValueError:
         raise LLMError("model unavailable and no cached output matches this policy text") from None
-    return {**res, "source": REPLAYED}
+    return {**res, "source": REPLAYED, "fallback_reason": reason}
 
 
 def generate_scenarios(rules, transport=None, replay=False):
+    reason = "replay requested" if replay else "model not configured"
     payload = json.dumps([r.model_dump() for r in rules])
     msgs = [{"role": "system", "content": SCENARIO_PROMPT}, {"role": "user", "content": payload}]
     if not replay and (transport or configured()):
         try:
             return {"scenarios": chat_json(msgs, lambda o: _parse_scenarios(o, rules), transport),
-                    "source": MODEL}
-        except LLMError:
-            pass
+                    "source": MODEL, "fallback_reason": None}
+        except LLMError as e:
+            reason = str(e)
     try:
-        return {"scenarios": _parse_scenarios(_golden("scenarios.json"), rules), "source": REPLAYED}
+        return {"scenarios": _parse_scenarios(_golden("scenarios.json"), rules), "source": REPLAYED,
+                "fallback_reason": reason}
     except ValueError:
         raise LLMError("model unavailable and no cached scenarios match these rules") from None
 
@@ -214,7 +217,8 @@ def analyze(policy_text, transport=None, replay=False):
     r = extract_rules(policy_text, transport, replay)
     s = generate_scenarios(r["rules"], transport, replay)
     return {"rules": r["rules"], "unsupported": r["unsupported"], "scenarios": s["scenarios"],
-            "source": {"rules": r["source"], "scenarios": s["source"]}}
+            "source": {"rules": r["source"], "scenarios": s["source"]},
+            "fallback_reason": {"rules": r["fallback_reason"], "scenarios": s["fallback_reason"]}}
 
 
 if __name__ == "__main__":
@@ -224,6 +228,9 @@ if __name__ == "__main__":
     a = ap.parse_args()
     out = analyze(Path(a.policy).read_text(), replay=a.replay)
     print("source:", out["source"])
+    for k, v in out["fallback_reason"].items():
+        if v:
+            print(f"  why {k} fell back to replay: {v}")
     for r in out["rules"]:
         print(f"RULE {r.rule_id} [{r.invariant_type}] {r.params}  <- \"{r.source_clause}\"")
     for u in out["unsupported"]:

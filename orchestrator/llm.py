@@ -6,6 +6,7 @@ chat_json: temperature 0, strip markdown fences, validate, retry ONCE with the r
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
 
@@ -52,6 +53,8 @@ def chat_json(messages, validate, transport=None, model=None):
     msgs, err = list(messages), None
     for _ in range(2):                              # first try + exactly one retry
         raw = transport(msgs, model)
+        if os.environ.get("PR_DEBUG") == "1":        # model OUTPUT only; the key is never in scope here
+            print(f"[PR_DEBUG] model returned {len(raw)} chars:\n{raw[:3000]}\n[/PR_DEBUG]", file=sys.stderr)
         try:
             return validate(json.loads(strip_fences(raw)))
         except ValueError as e:

@@ -23,3 +23,9 @@ def test_garbage_still_fails_so_the_retry_path_runs():
     for bad in ["no json here", "", "<think>only thoughts</think>", "{unclosed"]:
         with pytest.raises(ValueError):
             parse(bad)
+
+
+def test_first_complete_object_wins_over_trailing_text_and_second_object():
+    assert parse('{"a": 1}\n\nNote: this is {not} json') == {"a": 1}
+    assert parse('{"a": 1} {"b": 2}') == {"a": 1}
+    assert parse('Here you go: {"a": {"b": [1, {"c": 2}]}} thanks') == {"a": {"b": [1, {"c": 2}]}}

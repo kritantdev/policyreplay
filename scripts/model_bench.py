@@ -25,10 +25,12 @@ DEFAULT = ["deepseek-v4.1-flash-1017", "glm-5.3-flash", "qwen3.8-flash-next",
 POLICY = (ROOT / "policies" / "sample_policy.txt").read_text()
 SHOTS = {"buggy": ROOT / "runs/sandbox/buggy_15000/evidence/screenshots/05_click.png",
          "correct": ROOT / "runs/sandbox/correct_15000/evidence/screenshots/05_click.png"}
-EXPECT = {"buggy": (True, False), "correct": (False, True)}   # (refund_issued, error_visible)
-VISION_PROMPT = ("This is a screenshot of an order page in a web shop. Return ONLY JSON: "
-                 '{"refund_issued": true or false, "error_message_visible": true or false}. '
-                 "refund_issued is true only if the page says a refund was issued.")
+EXPECT = {"buggy": "completed", "correct": "rejected"}
+VISION_PROMPT = ("This is a screenshot of an order page in a web shop, taken right after someone "
+                 "submitted a refund request. Return ONLY JSON: "
+                 '{"outcome": "completed" | "rejected" | "unclear", "visible_message": "<the status message '
+                 'text shown on the page, or empty string>"}. outcome is "completed" if the page says the '
+                 'refund was issued, "rejected" if it shows a message refusing or blocking it, otherwise "unclear".')
 
 
 def bench_text(model, runs=2):
@@ -55,25 +57,27 @@ def bench_vision(model):
             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}]}]
         try:
             d = json.loads(extract_json_text(http_transport(msg, model, timeout=120)))
-            if (d.get("refund_issued"), d.get("error_message_visible")) == EXPECT[kind]:
+            if d.get("outcome") == EXPECT[kind]:
                 good += 1
             elif why is None:
-                why = f"{kind}: wrong answer {d}"
+                why = f"{kind}: got {d.get('outcome')!r} ({str(d.get('visible_message'))[:60]!r})"
         except (LLMError, ValueError) as e:
             why = why or f"{kind}: {str(e)[:120]}"
     return good, why
 
 
 if __name__ == "__main__":
-    models = sys.argv[1:] or DEFAULT
+    vision_only = "--vision-only" in sys.argv
+    models = [a for a in sys.argv[1:] if not a.startswith("--")] or DEFAULT
     print(f"{'model':34} {'text ok':8} {'avg s':6} {'vision':7} notes")
     for m in models:
         try:
-            ok, runs, avg, twhy = bench_text(m)
+            ok, runs, avg, twhy = (0, 0, 0.0, None) if vision_only else bench_text(m)
             vg, vwhy = bench_vision(m)
         except Exception as e:     # keep going; never print anything that could contain a key
             print(f"{m:34} ERROR {type(e).__name__}")
             continue
         vis = "n/a" if vg is None else f"{vg}/2"
         note = "; ".join(x for x in (twhy, vwhy) if x)[:160]
-        print(f"{m:34} {ok}/{runs:<6} {avg:5.1f}s {vis:7} {note}")
+        txt = "skipped" if vision_only else f"{ok}/{runs}"
+        print(f"{m:34} {txt:8} {avg:5.1f}s {vis:7} {note}")

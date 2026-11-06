@@ -26,10 +26,14 @@ def extract_json_text(raw):
     Leniency here is safe: whatever comes out is still validated strictly afterwards."""
     t = re.sub(r"<think>.*?</think>", "", raw, flags=re.S | re.I).strip()
     t = strip_fences(t)
-    if not t.startswith(("{", "[")):
-        a, b = t.find("{"), t.rfind("}")
-        if a != -1 and b > a:
-            t = t[a:b + 1]
+    starts = [i for i in (t.find("{"), t.find("[")) if i != -1]
+    if starts:
+        a = min(starts)
+        try:                                   # take the FIRST complete JSON value, ignore any trailing text
+            _, end = json.JSONDecoder().raw_decode(t[a:])
+            return t[a:a + end]
+        except ValueError:
+            return t
     return t
 
 

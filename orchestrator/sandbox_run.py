@@ -9,6 +9,7 @@ No API keys are passed to any container. Argument lists only; no shell. No docke
 Host mounts: the read-only plan file and the run's evidence directory only.
 """
 import argparse
+import ast
 import json
 import shutil
 import subprocess
@@ -20,7 +21,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from local_e2e import CASES  # noqa: E402
+try:
+    from orchestrator.local_e2e import CASES  # noqa: E402
+except ImportError:
+    from local_e2e import CASES  # noqa: E402
 from verifier.make_fixtures import case_files  # noqa: E402
 from verifier.verify import verify  # noqa: E402
 
@@ -40,7 +44,11 @@ for label, host in (('internet', '1.1.1.1'), ('metadata', '169.254.169.254')):
         socket.create_connection((host, 80), timeout=3); r[label] = 'ALLOWED (bad)'
     except OSError as e:
         r[label] = 'blocked: ' + str(e)
-r['secret_like_env_vars'] = [k for k in os.environ if any(w in k.upper() for w in ('KEY', 'TOKEN', 'SECRET'))]
+BASE_IMAGE_PUBLIC = {'GPG_KEY'}  # public GPG key ID shipped in the official python image, not a credential
+r['env_var_names'] = sorted(os.environ)
+r['secret_like_env_vars'] = [k for k in os.environ if k not in BASE_IMAGE_PUBLIC
+                             and any(w in k.upper() for w in ('KEY', 'TOKEN', 'SECRET'))]
+r['vultr_vars'] = [k for k in os.environ if k.upper().startswith('VULTR')]
 from playwright.sync_api import sync_playwright
 with sync_playwright() as p:
     b = p.chromium.launch(args=['--no-sandbox']); pg = b.new_page()
@@ -89,6 +97,57 @@ def build():
             sys.exit("build failed")
 
 
+def probe_ok(returncode, stdout):
+    """The probe must PROVE each claim, not just launch Chromium."""
+    try:
+        d = ast.literal_eval(stdout.strip().splitlines()[-1])
+    except (ValueError, SyntaxError, IndexError):
+        return False
+    blocked = lambda k: str(d.get(k, "")).startswith("blocked")  # noqa: E731
+    return (returncode == 0 and d.get("chromium") == "ok" and blocked("rootfs_write")
+            and blocked("internet") and blocked("metadata")
+            and not d.get("secret_like_env_vars") and not d.get("vultr_vars"))
+
+
+STRESS_MEM = "b = []\nwhile True:\n    b.append(bytearray(10_000_000))"
+STRESS_FORK = """
+import os, time
+n = 0
+try:
+    while True:
+        if os.fork() == 0:
+            time.sleep(30); os._exit(0)
+        n += 1
+except OSError as e:
+    print(f'fork blocked after {n} children: {e}')
+"""
+
+
+def stress():
+    """v3 containment demos: memory hog is killed (exit 137), fork loop is capped by --pids-limit."""
+    out = {}
+    mem = f"pr-mem-{uuid.uuid4().hex[:6]}"
+    docker(["run", "--name", mem, "--network", "none", *harden("128m", "64", "0.5"),
+            "--memory-swap", "128m", "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
+            "--entrypoint", "python", WK_IMG, "-c", STRESS_MEM], timeout=120)
+    st = docker(["inspect", "-f", "{{.State.ExitCode}} {{.State.OOMKilled}}", mem]).stdout.split()
+    out["memory_hog"] = {"exit_code": st[0] if st else "?", "oom_killed": st[1] if len(st) > 1 else "?",
+                         "limit": "128m"}
+    fork = f"pr-fork-{uuid.uuid4().hex[:6]}"
+    r = docker(["run", "--name", fork, "--network", "none", *harden("256m", "32", "0.5"),
+                "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m", "--entrypoint", "python", WK_IMG,
+                "-c", STRESS_FORK], timeout=120)
+    out["fork_loop"] = {"output": r.stdout.strip(), "pids_limit": 32}
+    docker(["rm", "-f", mem, fork])
+    left = [n for n in inventory()["containers"] if n in (mem, fork)]
+    out["cleanup_confirmed"] = not left
+    print(json.dumps(out, indent=2))
+    ok = (out["memory_hog"]["exit_code"] == "137" and out["memory_hog"]["oom_killed"] == "true"
+          and "fork blocked" in out["fork_loop"]["output"] and out["cleanup_confirmed"])
+    print("STRESS", "OK: memory hog killed (137), fork loop capped, nothing left behind" if ok else "FAILED")
+    sys.exit(0 if ok else 1)
+
+
 def probe():
     net = f"pr-probe-{uuid.uuid4().hex[:6]}"
     docker(["network", "create", "--internal", net])
@@ -99,16 +158,16 @@ def probe():
     finally:
         docker(["network", "rm", net])
     print(r.stdout or "", r.stderr or "")
-    ok = r.returncode == 0 and "'chromium': 'ok'" in r.stdout
+    ok = probe_ok(r.returncode, r.stdout)
     print("PROBE", "OK: Chromium runs in the hardened container" if ok else "FAILED")
     sys.exit(0 if ok else 1)
 
 
-def run_case(c, outdir):
-    policy, name, profile = c["policy"], c["name"], c["profile"]
+def run_scenario(rule, sc, profile, out, on_event=None):
+    emit = (lambda t, **kw: on_event({"type": t, **kw})) if on_event else (lambda t, **kw: None)
     rid = uuid.uuid4().hex[:8]
     net, app, wk = f"pr-net-{rid}", f"app-{rid}", f"worker-{rid}"
-    out = Path(outdir) / name
+    out = Path(out)
     shutil.rmtree(out, ignore_errors=True)
     ev = out / "evidence"
     ev.mkdir(parents=True)
@@ -133,12 +192,13 @@ def run_case(c, outdir):
             time.sleep(0.5)
         else:
             raise RuntimeError("target app did not become ready")
+        emit("stage", text="isolated network and target app container ready")
         summary["containment"]["network_internal"] = docker(
             ["network", "inspect", net, "--format", "{{.Internal}}"]).stdout.strip()
         summary["containment"]["app"] = inspect_summary(app)
         snapshot_db(app, out / "pre.db")
+        emit("stage", text="pre-run database snapshot copied out")
 
-        rule, sc = case_files(policy, name, c["params"])
         (out / "rule.json").write_text(json.dumps(rule, indent=2))
         (out / "scenario.json").write_text(json.dumps(sc, indent=2))
         (out / "plan.json").write_text(json.dumps(sc["steps"]))
@@ -152,6 +212,7 @@ def run_case(c, outdir):
         if c.returncode != 0:
             raise RuntimeError("worker create failed: " + c.stderr[:300])
         summary["containment"]["worker"] = inspect_summary(wk)
+        emit("stage", text="browser agent executing in the hardened sandbox")
         try:
             w = docker(["start", "-a", wk], timeout=180)
             summary["worker_exit"] = w.returncode
@@ -160,6 +221,7 @@ def run_case(c, outdir):
             docker(["kill", wk])
             summary["worker_exit"] = "timeout"
         snapshot_db(app, out / "post.db")
+        emit("stage", text="post-run database snapshot copied out")
     except Exception as e:
         summary["error"] = str(e)
     finally:
@@ -170,6 +232,7 @@ def run_case(c, outdir):
     left = [n for n in after["containers"] + after["networks"] if rid in n]
     summary["cleanup_confirmed"] = not left
     summary["leftovers"] = left
+    emit("stage", text="containers and network destroyed; cleanup " + ("confirmed" if not left else "FAILED"))
 
     log = ev / "http_log.json"
     if log.exists():
@@ -182,15 +245,22 @@ def run_case(c, outdir):
     return res
 
 
+def run_case(c, outdir):
+    rule, sc = case_files(c["policy"], c["name"], c["params"])
+    return run_scenario(rule, sc, c["profile"], Path(outdir) / c["name"])
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["build", "probe", "run"])
+    ap.add_argument("cmd", choices=["build", "probe", "stress", "run"])
     ap.add_argument("--case")
     a = ap.parse_args()
     if a.cmd == "build":
         build()
     elif a.cmd == "probe":
         probe()
+    elif a.cmd == "stress":
+        stress()
     else:
         for c in CASES:
             if a.case and a.case != c["name"]:

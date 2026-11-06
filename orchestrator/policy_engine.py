@@ -165,6 +165,8 @@ def _parse_scenarios(obj, rules):
         sc = Scenario.model_validate(raw)
         if sc.rule_id not in by_id:
             raise ValueError(f"{sc.test_id}: unknown rule_id {sc.rule_id}")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", sc.test_id):
+            raise ValueError(f"test_id {sc.test_id!r} must match [A-Za-z0-9_-]{{1,40}}")
         out.append(check_scenario(sc, by_id[sc.rule_id]))
     if len({s.test_id for s in out}) != len(out):
         raise ValueError("duplicate test_id")

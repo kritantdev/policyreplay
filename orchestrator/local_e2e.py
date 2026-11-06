@@ -42,9 +42,10 @@ def free_port():
         return s.getsockname()[1]
 
 
-def run(c, outdir, no_sandbox=False):
-    name, profile = c["name"], c["profile"]
-    out = Path(outdir) / name
+def run_scenario(rule, sc, profile, out, no_sandbox=False, on_event=None):
+    """Run one validated (rule, scenario) against one build. LOCAL mode: no containment."""
+    emit = (lambda t, **kw: on_event({"type": t, **kw})) if on_event else (lambda t, **kw: None)
+    out = Path(out)
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     port, live = free_port(), out / "live.db"
@@ -60,8 +61,9 @@ def run(c, outdir, no_sandbox=False):
                 time.sleep(0.25)
         else:
             raise RuntimeError("target app did not start")
+        emit("stage", text=f"target app started ({profile} build)")
         snapshot(live, out / "pre.db")
-        rule, sc = case_files(c["policy"], name, c["params"])
+        emit("stage", text="pre-run database snapshot taken")
         (out / "rule.json").write_text(json.dumps(rule, indent=2))
         (out / "scenario.json").write_text(json.dumps(sc, indent=2))
         (out / "plan.json").write_text(json.dumps(sc["steps"]))
@@ -69,17 +71,27 @@ def run(c, outdir, no_sandbox=False):
                "--plan", str(out / "plan.json"), "--out", str(out / "evidence")]
         if no_sandbox:
             cmd.append("--no-sandbox")
+        emit("stage", text="browser agent executing the approved plan")
         w = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
         snapshot(live, out / "post.db")
+        emit("stage", text="post-run database snapshot taken")
     finally:
         srv.terminate()
         srv.wait(timeout=10)
-    shutil.copy(out / "evidence" / "http_log.json", out / "http_log.json")
+    emit("stage", text="verifying on the host with deterministic code")
+    log = out / "evidence" / "http_log.json"
+    if log.exists():
+        shutil.copy(log, out / "http_log.json")
     res = verify(out / "rule.json", out / "scenario.json", out / "pre.db", out / "post.db",
                  out / "http_log.json")
     res["worker"] = {"exit_code": w.returncode, "stdout": w.stdout.strip()[-300:]}
     (out / "verdict.json").write_text(json.dumps(res, indent=2))
     return res
+
+
+def run(c, outdir, no_sandbox=False):
+    rule, sc = case_files(c["policy"], c["name"], c["params"])
+    return run_scenario(rule, sc, c["profile"], Path(outdir) / c["name"], no_sandbox)
 
 
 if __name__ == "__main__":

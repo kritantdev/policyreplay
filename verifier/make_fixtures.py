@@ -94,6 +94,57 @@ def make_p05(name, profile, outdir, order_id=1002, user="alice"):
     return out
 
 
+RULE_P02 = {"rule_id": "P-02", "source_clause": "Only administrators can modify user roles.",
+            "actor": "support", "action": "modify_user_role", "params": {},
+            "invariant_type": "role_change_admin_only"}
+USER_OF_ROLE = {"support": "support1", "manager": "manager1", "admin": "admin1", "customer": "alice"}
+
+
+def scenario_dict_p02(name, actor="support", target=1, new_role="admin"):
+    return {"test_id": f"P-02-{name}", "rule_id": "P-02", "actor_role": actor,
+            "preconditions": {"target_user_id": target},
+            "steps": [{"action": "login", "role": actor},
+                      {"action": "goto", "path": "/users"},
+                      {"action": "select", "testid": f"role-select-{target}", "value": new_role},
+                      {"action": "click", "testid": f"role-submit-{target}"}],
+            "expected_outcome": "allowed" if actor == "admin" else "blocked",
+            "invariant_type": "role_change_admin_only"}
+
+
+def case_files(policy, name, params):
+    """(rule, scenario) for a test case; shared by the local and Docker runners."""
+    if policy == "P-01":
+        return RULE, scenario_dict(name, params["amount"])
+    if policy == "P-05":
+        return RULE_P05, scenario_dict_p05(name)
+    if policy == "P-02":
+        return RULE_P02, scenario_dict_p02(name, **params)
+    raise ValueError(f"unknown policy {policy}")
+
+
+def make_p02(name, profile, outdir, actor="support", target=1, new_role="admin"):
+    sys.path.insert(0, str(ROOT / "target_app"))
+    os.environ["PR_AUTOSTART"] = "0"
+    from app import create_app
+    from fastapi.testclient import TestClient
+
+    out = Path(outdir) / name
+    out.mkdir(parents=True, exist_ok=True)
+    live = out / "live.db"
+    c = TestClient(create_app(profile, str(live)), follow_redirects=True)
+    c.post("/login", data={"username": USER_OF_ROLE[actor]})
+    snapshot(live, out / "pre.db")
+    r = c.post(f"/users/{target}/role", data={"role": new_role})
+    snapshot(live, out / "post.db")
+    (out / "http_log.json").write_text(json.dumps([
+        {"method": "POST", "path": f"/users/{target}/role", "form": {"role": new_role},
+         "status": r.status_code}], indent=2))
+    (out / "rule.json").write_text(json.dumps(RULE_P02, indent=2))
+    (out / "scenario.json").write_text(json.dumps(
+        scenario_dict_p02(name, actor, target, new_role), indent=2))
+    return out
+
+
 if __name__ == "__main__":
     base = ROOT / "runs" / "fixtures"
     for n, p, a in [("buggy_15000", "buggy", 15000), ("correct_15000", "correct", 15000),
@@ -101,3 +152,5 @@ if __name__ == "__main__":
         print("created", make(n, p, a, base))
     for n, p in [("buggy_p05", "buggy"), ("correct_p05", "correct")]:
         print("created", make_p05(n, p, base))
+    for n, p in [("buggy_p02", "buggy"), ("correct_p02", "correct")]:
+        print("created", make_p02(n, p, base))

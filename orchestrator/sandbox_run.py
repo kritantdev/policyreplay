@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from local_e2e import CASES  # noqa: E402
-from verifier.make_fixtures import RULE, RULE_P05, scenario_dict, scenario_dict_p05  # noqa: E402
+from verifier.make_fixtures import case_files  # noqa: E402
 from verifier.verify import verify  # noqa: E402
 
 APP_IMG, WK_IMG = "pr-target-app", "pr-worker"
@@ -104,7 +104,8 @@ def probe():
     sys.exit(0 if ok else 1)
 
 
-def run_case(policy, name, profile, amount, outdir):
+def run_case(c, outdir):
+    policy, name, profile = c["policy"], c["name"], c["profile"]
     rid = uuid.uuid4().hex[:8]
     net, app, wk = f"pr-net-{rid}", f"app-{rid}", f"worker-{rid}"
     out = Path(outdir) / name
@@ -137,8 +138,8 @@ def run_case(policy, name, profile, amount, outdir):
         summary["containment"]["app"] = inspect_summary(app)
         snapshot_db(app, out / "pre.db")
 
-        sc = scenario_dict(name, amount) if policy == "P-01" else scenario_dict_p05(name)
-        (out / "rule.json").write_text(json.dumps(RULE if policy == "P-01" else RULE_P05, indent=2))
+        rule, sc = case_files(policy, name, c["params"])
+        (out / "rule.json").write_text(json.dumps(rule, indent=2))
         (out / "scenario.json").write_text(json.dumps(sc, indent=2))
         (out / "plan.json").write_text(json.dumps(sc["steps"]))
 
@@ -191,10 +192,11 @@ if __name__ == "__main__":
     elif a.cmd == "probe":
         probe()
     else:
-        for policy, name, profile, amount in CASES:
-            if a.case and a.case != name:
+        for c in CASES:
+            if a.case and a.case != c["name"]:
                 continue
-            r = run_case(policy, name, profile, amount, ROOT / "runs" / "sandbox")
+            r = run_case(c, ROOT / "runs" / "sandbox")
             s = r["sandbox"]
-            print(f"{name:15} {r['verdict']:12} cleanup={s['cleanup_confirmed']} "
+            ok = "OK" if r["verdict"] == c["expected"] else "MISMATCH"
+            print(f"{c['name']:15} {r['verdict']:12} {ok:8} cleanup={s['cleanup_confirmed']} "
                   f"worker_exit={s['worker_exit']} {s['error'] or r['reasons'][0]}")

@@ -34,7 +34,7 @@ def J(o):
 def test_good_model_output_is_accepted():
     t = fake(J(GOOD_RULES))
     r = extract_rules(POLICY, t)
-    assert r["source"] == MODEL and len(r["rules"]) == 2 and len(r["unsupported"]) == 3
+    assert r["source"] == MODEL and len(r["rules"]) == 3 and len(r["unsupported"]) == 2
 
 
 def test_markdown_fences_are_stripped():
@@ -121,4 +121,31 @@ def test_every_rule_needs_a_scenario():
 def test_end_to_end_replay_without_any_key():
     out = analyze(POLICY, replay=True)
     assert out["source"] == {"rules": REPLAYED, "scenarios": REPLAYED}
-    assert [s.test_id for s in out["scenarios"]] == ["P-01-ADV-001", "P-01-BND-001", "P-05-ADV-001"]
+    assert [s.test_id for s in out["scenarios"]] == ["P-01-ADV-001", "P-01-BND-001", "P-05-ADV-001", "P-02-ADV-001", "P-02-CTL-001"]
+
+
+def _p02(s):
+    return s["scenarios"][3]
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda s: s["preconditions"].__setitem__("target_user_id", 99),               # unknown user
+    lambda s: s.__setitem__("actor_role", "customer"),                            # cannot open /users
+    lambda s: s["steps"][2].__setitem__("value", "superuser"),                    # not a role
+    lambda s: s["steps"][2].__setitem__("testid", "role-select-2"),               # wrong target row
+    lambda s: s["steps"].pop(),                                                   # never clicks submit
+    lambda s: s["preconditions"].__setitem__("order_id", 1001),                   # extra precondition
+])
+def test_bad_p02_scenarios_rejected_then_replayed(mutate):
+    s = json.loads(J(GOOD_SC))
+    mutate(_p02(s))
+    assert generate_scenarios(_rules(), fake(J(s), J(s)))["source"] == REPLAYED
+
+
+def test_p02_expected_outcome_is_recomputed():
+    s = json.loads(J(GOOD_SC))
+    _p02(s)["expected_outcome"] = "allowed"                                       # model lies
+    out = generate_scenarios(_rules(), fake(J(s)))
+    assert out["source"] == MODEL
+    by = {x.test_id: x.expected_outcome for x in out["scenarios"]}
+    assert by["P-02-ADV-001"] == "blocked" and by["P-02-CTL-001"] == "allowed"

@@ -28,6 +28,8 @@ MODEL, REPLAYED = "model", "replayed model output"
 # Target-app profile (what a tester would get from API docs). Seeded state is fixed.
 ORDER_TOTAL = {1001: 20000, 1002: 8000}
 CUSTOMER_OWN_ORDER = 1001   # the 'customer' login (alice) owns 1001; bob owns 1002
+USER_IDS = {1, 2, 3, 4, 5}  # 1 support1, 2 manager1, 3 admin1, 4 alice, 5 bob
+ROLES = {"support", "manager", "admin", "customer"}
 
 RULES_PROMPT = """You extract testable rules from a business policy.
 Return ONLY JSON: {"rules":[{"rule_id":str,"source_clause":str,"actor":str,"action":str,
@@ -35,6 +37,7 @@ Return ONLY JSON: {"rules":[{"rule_id":str,"source_clause":str,"actor":str,"acti
 invariant_type must be exactly one of:
 - "approval_required_over_threshold": params {"threshold": <integer INR>}
 - "owner_only_access": params {}
+- "role_change_admin_only": params {}
 Use the policy's own ids (e.g. P-01) as rule_id. source_clause must be copied VERBATIM from the policy.
 Clauses that fit neither type go in unsupported_clauses (copied verbatim). Never invent clauses or numbers."""
 
@@ -50,6 +53,11 @@ approval_required_over_threshold scenarios: preconditions {"order_id":1001,"appr
 login support, goto /orders/1001, fill refund-amount (integer string 1..20000), click refund-submit.
 Include one adversarial amount above the threshold and one at exactly the threshold (boundary).
 owner_only_access scenarios: preconditions {"order_id":1002}; steps = login customer, goto /orders/1002.
+Users page /users (staff only) has, per user id N: testids role-select-N and role-submit-N.
+role_change_admin_only scenarios: preconditions {"target_user_id":N}; steps = login R (support, manager or admin),
+goto /users, {"action":"select","testid":"role-select-N","value":<role>}, click role-submit-N.
+Include one adversarial self-promotion (support, target 1, value admin) and one positive control
+(login admin, target 4, value manager). Roles: support, manager, admin, customer.
 Use test_ids like P-01-ADV-001, P-01-BND-001. Give 1-3 scenarios per rule."""
 
 
@@ -88,38 +96,63 @@ def _parse_rules(obj, policy_text):
     return {"rules": rules, "unsupported": uns}
 
 
+def _int(v, label):
+    if isinstance(v, bool) or not isinstance(v, (int, str)) or (isinstance(v, str) and not v.isdigit()):
+        raise ValueError(f"{label} must be an integer")
+    return int(v)
+
+
 def check_scenario(sc, rule):
     """Deterministic relevance checks; returns the scenario with expected_outcome recomputed."""
     validate_plan(sc.steps)
     if sc.rule_id != rule.rule_id or sc.invariant_type != rule.invariant_type:
         raise ValueError(f"{sc.test_id}: rule_id/invariant_type does not match its rule")
-    steps, pre = sc.steps, sc.preconditions
-    try:
-        order_id = int(pre.get("order_id"))
-    except (TypeError, ValueError):
-        raise ValueError(f"{sc.test_id}: preconditions.order_id must be an integer") from None
-    if order_id not in ORDER_TOTAL:
-        raise ValueError(f"{sc.test_id}: unknown order {order_id}")
-    if not steps or steps[0].get("action") != "login" or steps[0].get("role") != sc.actor_role:
+    steps, pre, t = sc.steps, sc.preconditions, rule.invariant_type
+    if steps[0].get("action") != "login" or steps[0].get("role") != sc.actor_role:
         raise ValueError(f"{sc.test_id}: first step must log in as actor_role")
-    path = f"/orders/{order_id}"
-    if not any(s["action"] == "goto" and s["path"] == path for s in steps):
-        raise ValueError(f"{sc.test_id}: plan never opens {path}")
-    if rule.invariant_type == "approval_required_over_threshold":
+
+    def opens(path):
+        return any(x["action"] == "goto" and x["path"] == path for x in steps)
+
+    if t in ("approval_required_over_threshold", "owner_only_access"):
+        order_id = _int(pre.get("order_id"), f"{sc.test_id}: order_id")
+        if order_id not in ORDER_TOTAL:
+            raise ValueError(f"{sc.test_id}: unknown order {order_id}")
+        if not opens(f"/orders/{order_id}"):
+            raise ValueError(f"{sc.test_id}: plan never opens /orders/{order_id}")
+    if t == "approval_required_over_threshold":
         if pre.get("approval_state") != "none" or set(pre) != {"order_id", "approval_state"}:
             raise ValueError(f"{sc.test_id}: preconditions must be order_id + approval_state 'none'")
-        fills = [s for s in steps if s["action"] == "fill" and s["testid"] == "refund-amount"]
-        clicks = [i for i, s in enumerate(steps) if s["action"] == "click" and s["testid"] == "refund-submit"]
+        fills = [x for x in steps if x["action"] == "fill" and x["testid"] == "refund-amount"]
+        clicks = [i for i, x in enumerate(steps) if x["action"] == "click" and x["testid"] == "refund-submit"]
         if not fills or not clicks or not fills[-1]["value"].isdigit():
             raise ValueError(f"{sc.test_id}: plan must fill refund-amount (digits) and click refund-submit")
         amount = int(fills[-1]["value"])
         if not 0 < amount <= ORDER_TOTAL[order_id]:
             raise ValueError(f"{sc.test_id}: refund amount outside 1..{ORDER_TOTAL[order_id]}")
         outcome = "blocked" if amount > rule.params["threshold"] else "allowed"
-    else:
+    elif t == "owner_only_access":
         if set(pre) != {"order_id"} or order_id == CUSTOMER_OWN_ORDER or sc.actor_role != "customer":
             raise ValueError(f"{sc.test_id}: must be customer opening an order they do not own")
         outcome = "blocked"
+    elif t == "role_change_admin_only":
+        if set(pre) != {"target_user_id"}:
+            raise ValueError(f"{sc.test_id}: preconditions must be exactly target_user_id")
+        tid = _int(pre["target_user_id"], f"{sc.test_id}: target_user_id")
+        if tid not in USER_IDS:
+            raise ValueError(f"{sc.test_id}: unknown user {tid}")
+        if sc.actor_role not in {"support", "manager", "admin"}:
+            raise ValueError(f"{sc.test_id}: actor must be a staff role that can open /users")
+        if not opens("/users"):
+            raise ValueError(f"{sc.test_id}: plan never opens /users")
+        sel = [i for i, x in enumerate(steps) if x["action"] == "select"
+               and x["testid"] == f"role-select-{tid}" and x["value"] in ROLES]
+        clk = [i for i, x in enumerate(steps) if x["action"] == "click" and x["testid"] == f"role-submit-{tid}"]
+        if not sel or not clk or max(clk) < min(sel):
+            raise ValueError(f"{sc.test_id}: plan must select a valid role then click role-submit-{tid}")
+        outcome = "allowed" if sc.actor_role == "admin" else "blocked"
+    else:
+        raise ValueError(f"no scenario checks for {t}")
     return sc.model_copy(update={"expected_outcome": outcome})
 
 

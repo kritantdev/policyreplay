@@ -177,3 +177,84 @@ def owner_only_access(rule, scenario, pre, post, http_log):
                                f"view was served"], checks, observed)
     return _inc("page was served but no foreign-customer access is recorded; the scenario did not "
                 "exercise a non-owner customer", checks, observed)
+
+
+VALID_ROLES = {"support", "manager", "admin", "customer"}
+
+
+def role_change_admin_only(rule, scenario, pre, post, http_log):
+    """P-02. Only administrators may change user roles.
+
+    Evidence (all must agree): the browser-observed HTTP status, the users table before vs after,
+    and the role_changes audit row, which records the actor's role at the time of the attempt.
+    Limitation: the audit table is maintained by the app under test.
+    """
+    try:
+        target = int(scenario.preconditions["target_user_id"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("scenario target_user_id missing or not an integer")
+    actor = scenario.actor_role
+    if actor not in VALID_ROLES:
+        return _inc("scenario actor_role is not a known role")
+
+    checks, observed = {}, {}
+    try:
+        pre_row = pre.execute("SELECT role FROM users WHERE id=?", (target,)).fetchone()
+        actors = pre.execute("SELECT COUNT(*) FROM users WHERE role=?", (actor,)).fetchone()[0]
+        pre_ids = {r[0] for r in pre.execute(
+            "SELECT id FROM role_changes WHERE target_user_id=?", (target,))}
+    except sqlite3.Error as e:
+        return _inc(f"pre-run snapshot unreadable: {e}")
+    checks["precondition_target_exists"] = pre_row is not None
+    checks["precondition_actor_role_exists"] = actors >= 1
+    if not all(checks.values()):
+        return _inc("seed state does not match scenario preconditions", checks)
+
+    attempts = [e for e in http_log
+                if e.get("method") == "POST" and e.get("path") == f"/users/{target}/role"]
+    checks["attempt_logged"] = bool(attempts)
+    if not attempts:
+        return _inc("role-change attempt not found in HTTP log", checks)
+    try:
+        new_role = attempts[-1]["form"]["role"]
+        status = int(attempts[-1]["status"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("attempt log entry has no usable role or status", checks)
+    if new_role not in VALID_ROLES:
+        return _inc("attempted role is not a known role", checks)
+    pre_role = pre_row[0]
+    checks["precondition_role_differs"] = pre_role != new_role
+    observed["attempt"] = {"target_user_id": target, "new_role": new_role, "status": status}
+    if pre_role == new_role:
+        return _inc("attempted role equals the current role; no change is observable", checks, observed)
+
+    try:
+        post_row = post.execute("SELECT role FROM users WHERE id=?", (target,)).fetchone()
+        post_audit = post.execute("SELECT id, actor_role, applied, new_role FROM role_changes "
+                                  "WHERE target_user_id=?", (target,)).fetchall()
+    except sqlite3.Error as e:
+        return _inc(f"post-run snapshot unreadable: {e}", checks, observed)
+    if post_row is None:
+        return _inc("target user missing from post-run snapshot", checks, observed)
+    post_role = post_row[0]
+    new_audit = [list(r) for r in post_audit if r[0] not in pre_ids]
+    applied = [a for a in new_audit if a[2] == 1 and a[1] == actor and a[3] == new_role]
+    observed.update(role_before=pre_role, role_after=post_role, new_audit_rows=new_audit)
+    changed = post_role != pre_role
+
+    if actor == "admin":
+        if status == 200 and post_role == new_role and applied:
+            checks["invariant_upheld"] = True
+            return Result("PASS", [f"an administrator changed the role to {new_role}; permitted"],
+                          checks, observed)
+        return _inc("administrator change was not observed end to end", checks, observed)
+
+    if status == 200 and post_role == new_role and applied:
+        checks["invariant_upheld"] = False
+        return Result("VIOLATION", [f"a {actor} changed user {target} from {pre_role} to {new_role}; "
+                                    f"only administrators may modify roles"], checks, observed)
+    if status in (401, 403) and not changed and not any(a[2] == 1 for a in new_audit):
+        checks.update(attempt_blocked=True, invariant_upheld=True)
+        return Result("PASS", [f"role change by a {actor} was blocked (HTTP {status}); "
+                               f"role unchanged and no change applied"], checks, observed)
+    return _inc("conflicting evidence between HTTP log, users table and audit log", checks, observed)

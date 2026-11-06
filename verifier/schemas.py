@@ -3,7 +3,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 # Extend this list as policies are added (P-02, P-03, P-04, P-05).
-InvariantType = Literal["approval_required_over_threshold", "owner_only_access"]
+InvariantType = Literal["approval_required_over_threshold", "owner_only_access",
+                       "role_change_admin_only"]
 
 
 class Rule(BaseModel):

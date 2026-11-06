@@ -89,6 +89,64 @@
       ],
       "expected_outcome": "blocked",
       "invariant_type": "owner_only_access"
+    },
+    {
+      "test_id": "P-02-ADV-001",
+      "rule_id": "P-02",
+      "actor_role": "support",
+      "preconditions": {
+        "target_user_id": 1
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "support"
+        },
+        {
+          "action": "goto",
+          "path": "/users"
+        },
+        {
+          "action": "select",
+          "testid": "role-select-1",
+          "value": "admin"
+        },
+        {
+          "action": "click",
+          "testid": "role-submit-1"
+        }
+      ],
+      "expected_outcome": "blocked",
+      "invariant_type": "role_change_admin_only"
+    },
+    {
+      "test_id": "P-02-CTL-001",
+      "rule_id": "P-02",
+      "actor_role": "admin",
+      "preconditions": {
+        "target_user_id": 4
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "admin"
+        },
+        {
+          "action": "goto",
+          "path": "/users"
+        },
+        {
+          "action": "select",
+          "testid": "role-select-4",
+          "value": "manager"
+        },
+        {
+          "action": "click",
+          "testid": "role-submit-4"
+        }
+      ],
+      "expected_outcome": "allowed",
+      "invariant_type": "role_change_admin_only"
     }
   ]
 }

@@ -1,5 +1,5 @@
 """Local end-to-end run WITHOUT Docker: app -> pre snapshot -> Playwright worker -> post snapshot
--> host-side verifier. Proves the pipeline logic; the Docker/sandbox topology comes with the VM.
+-> host-side verifier. Proves the pipeline logic; the Docker/sandbox topology is sandbox_run.py.
 
   python orchestrator/local_e2e.py [--no-sandbox]
 """
@@ -16,8 +16,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from verifier.make_fixtures import RULE, RULE_P05, scenario_dict, scenario_dict_p05, snapshot  # noqa: E402
+from verifier.make_fixtures import case_files, snapshot  # noqa: E402
 from verifier.verify import verify  # noqa: E402
+
+
+def case(policy, name, profile, expected, **params):
+    return {"policy": policy, "name": name, "profile": profile, "expected": expected, "params": params}
+
+
+CASES = [
+    case("P-01", "buggy_15000", "buggy", "VIOLATION", amount=15000),
+    case("P-01", "correct_15000", "correct", "PASS", amount=15000),
+    case("P-01", "correct_10000", "correct", "PASS", amount=10000),
+    case("P-05", "buggy_p05", "buggy", "VIOLATION"),
+    case("P-05", "correct_p05", "correct", "PASS"),
+    case("P-02", "buggy_p02", "buggy", "VIOLATION", actor="support", target=1, new_role="admin"),
+    case("P-02", "correct_p02", "correct", "PASS", actor="support", target=1, new_role="admin"),
+    case("P-02", "admin_ctl_p02", "correct", "PASS", actor="admin", target=4, new_role="manager"),
+]
 
 
 def free_port():
@@ -26,12 +42,8 @@ def free_port():
         return s.getsockname()[1]
 
 
-CASES = [("P-01", "buggy_15000", "buggy", 15000), ("P-01", "correct_15000", "correct", 15000),
-         ("P-01", "correct_10000", "correct", 10000),
-         ("P-05", "buggy_p05", "buggy", None), ("P-05", "correct_p05", "correct", None)]
-
-
-def run(policy, name, profile, amount, outdir, no_sandbox=False):
+def run(c, outdir, no_sandbox=False):
+    name, profile = c["name"], c["profile"]
     out = Path(outdir) / name
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
@@ -49,8 +61,8 @@ def run(policy, name, profile, amount, outdir, no_sandbox=False):
         else:
             raise RuntimeError("target app did not start")
         snapshot(live, out / "pre.db")
-        sc = scenario_dict(name, amount) if policy == "P-01" else scenario_dict_p05(name)
-        (out / "rule.json").write_text(json.dumps(RULE if policy == "P-01" else RULE_P05, indent=2))
+        rule, sc = case_files(c["policy"], name, c["params"])
+        (out / "rule.json").write_text(json.dumps(rule, indent=2))
         (out / "scenario.json").write_text(json.dumps(sc, indent=2))
         (out / "plan.json").write_text(json.dumps(sc["steps"]))
         cmd = [sys.executable, "-m", "worker.run_plan", "--base-url", f"http://127.0.0.1:{port}",
@@ -75,6 +87,10 @@ if __name__ == "__main__":
     ap.add_argument("--no-sandbox", action="store_true",
                     default=os.environ.get("PR_NO_SANDBOX") == "1")
     a = ap.parse_args()
-    for policy, name, profile, amount in CASES:
-        r = run(policy, name, profile, amount, ROOT / "runs" / "e2e", a.no_sandbox)
-        print(f"{name:15} {r['verdict']:12} {r['reasons'][0]}")
+    bad = 0
+    for c in CASES:
+        r = run(c, ROOT / "runs" / "e2e", a.no_sandbox)
+        ok = r["verdict"] == c["expected"]
+        bad += not ok
+        print(f"{c['name']:15} {r['verdict']:12} {'OK' if ok else 'MISMATCH (expected ' + c['expected'] + ')'}  {r['reasons'][0]}")
+    sys.exit(1 if bad else 0)

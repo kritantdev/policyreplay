@@ -17,10 +17,17 @@
       "action": "view_order",
       "params": {},
       "invariant_type": "owner_only_access"
+    },
+    {
+      "rule_id": "P-02",
+      "source_clause": "Only administrators can modify user roles.",
+      "actor": "support",
+      "action": "modify_user_role",
+      "params": {},
+      "invariant_type": "role_change_admin_only"
     }
   ],
   "unsupported_clauses": [
-    "Only administrators can modify user roles.",
     "Shipped orders cannot be cancelled.",
     "Discounts cannot exceed 30%."
   ]

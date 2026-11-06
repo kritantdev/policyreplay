@@ -4,6 +4,9 @@ BUG_PROFILE=correct : enforces P-01 (refund > 10000 INR needs manager approval)
 BUG_PROFILE=buggy   : planted bug, skips the approval check
 Same code, same image; only the env flag differs.
 Threshold semantics: strictly greater than 10000 needs approval; exactly 10000 does not.
+P-02 planted bug (buggy only): POST /users/{id}/role lets any staff role change roles (UI shows the
+form to everyone; only the server check is missing). Every attempt is recorded in role_changes
+with the actor's role AT THE TIME (a self-promotion would otherwise hide the actor).
 P-05 planted bug (buggy only): GET /orders/{id} skips the ownership check (direct-URL access).
 Every order page view is recorded in order_views with the HTTP status actually returned.
 """
@@ -25,9 +28,13 @@ CREATE TABLE refunds(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amo
                      issued_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE approvals(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
                        requested_by INTEGER, approved_by INTEGER, status TEXT DEFAULT 'pending');
+CREATE TABLE role_changes(id INTEGER PRIMARY KEY AUTOINCREMENT, target_user_id INTEGER,
+                         old_role TEXT, new_role TEXT, changed_by INTEGER, actor_role TEXT,
+                         applied INTEGER, changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE order_views(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, order_id INTEGER,
                          status INTEGER, viewed_at TEXT DEFAULT CURRENT_TIMESTAMP);
 """
+ROLES = ["support", "manager", "admin", "customer"]
 SEED_USERS = [(1, "support1", "support"), (2, "manager1", "manager"), (3, "admin1", "admin"),
               (4, "alice", "customer"), (5, "bob", "customer")]
 SEED_ORDERS = [(1001, 4, 20000, "delivered"), (1002, 5, 8000, "delivered")]
@@ -159,6 +166,45 @@ def create_app(profile=None, db_path=None):
                     (u["id"], approval_id))
         con.commit()
         return RedirectResponse("/approvals", status_code=303)
+
+
+    def users_page(request, user, flash=None, kind=None, status=200):
+        rows = con.execute("SELECT * FROM users ORDER BY id").fetchall()
+        return tpl.TemplateResponse(request, "users.html", dict(
+            user=user, users=rows, roles=ROLES, flash=flash, kind=kind), status_code=status)
+
+    @app.get("/users", response_class=HTMLResponse)
+    def users(request: Request):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        if u["role"] == "customer":
+            return HTMLResponse('<p data-testid="error">Forbidden</p>', status_code=403)
+        return users_page(request, u)
+
+    @app.post("/users/{user_id}/role", response_class=HTMLResponse)
+    def change_role(request: Request, user_id: int, role: str = Form(...)):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        if u["role"] == "customer":
+            return HTMLResponse('<p data-testid="error">Forbidden</p>', status_code=403)
+        target = con.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if not target:
+            return HTMLResponse('<p data-testid="error">Not found</p>', status_code=404)
+        if role not in ROLES:
+            return users_page(request, u, "Unknown role", "error", 400)
+        # P-02 planted bug: the buggy build lets any staff user change roles.
+        allowed = (u["role"] == "admin") if profile == "correct" else True
+        con.execute("INSERT INTO role_changes(target_user_id, old_role, new_role, changed_by, "
+                    "actor_role, applied) VALUES(?,?,?,?,?,?)",
+                    (user_id, target["role"], role, u["id"], u["role"], 1 if allowed else 0))
+        if allowed:
+            con.execute("UPDATE users SET role=? WHERE id=?", (role, user_id))
+            con.commit()
+            return users_page(request, me(request), f"Role updated to {role}", "success")
+        con.commit()
+        return users_page(request, u, "Only administrators can change roles", "error", 403)
 
     return app
 

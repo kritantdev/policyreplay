@@ -21,6 +21,18 @@ def strip_fences(text):
     return re.sub(r"\s*```$", "", t).strip()
 
 
+def extract_json_text(raw):
+    """Tolerate <think> blocks, markdown fences and a sentence before/after the JSON.
+    Leniency here is safe: whatever comes out is still validated strictly afterwards."""
+    t = re.sub(r"<think>.*?</think>", "", raw, flags=re.S | re.I).strip()
+    t = strip_fences(t)
+    if not t.startswith(("{", "[")):
+        a, b = t.find("{"), t.rfind("}")
+        if a != -1 and b > a:
+            t = t[a:b + 1]
+    return t
+
+
 def configured():
     return bool(os.environ.get("VULTR_INFERENCE_KEY") and os.environ.get("PR_TEXT_MODEL"))
 
@@ -39,7 +51,10 @@ def http_transport(messages, model, timeout=60):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             data = json.load(r)
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
+        if not isinstance(content, str) or not content.strip():
+            raise LLMError("model returned empty content (reasoning-only or truncated reply)")
+        return content
     except urllib.error.HTTPError as e:
         raise LLMError(f"inference HTTP {e.code}") from None
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError, TypeError) as e:
@@ -56,7 +71,7 @@ def chat_json(messages, validate, transport=None, model=None):
         if os.environ.get("PR_DEBUG") == "1":        # model OUTPUT only; the key is never in scope here
             print(f"[PR_DEBUG] model returned {len(raw)} chars:\n{raw[:3000]}\n[/PR_DEBUG]", file=sys.stderr)
         try:
-            return validate(json.loads(strip_fences(raw)))
+            return validate(json.loads(extract_json_text(raw)))
         except ValueError as e:
             err = str(e)[:600]
             msgs += [{"role": "assistant", "content": raw[:4000]},

@@ -1,0 +1,3 @@
+{'rootfs_write': 'blocked: Read-only file system', 'internet': 'blocked: [Errno 101] Network is unreachable', 'metadata': 'blocked: [Errno 101] Network is unreachable', 'env_var_names': ['GPG_KEY', 'HOME', 'HOSTNAME', 'LANG', 'PATH', 'PLAYWRIGHT_BROWSERS_PATH', 'PYTHONDONTWRITEBYTECODE', 'PYTHONUNBUFFERED', 'PYTHON_SHA256', 'PYTHON_VERSION'], 'secret_like_env_vars': [], 'vultr_vars': [], 'chromium': 'ok'}
+ 
+PROBE OK: Chromium runs in the hardened container

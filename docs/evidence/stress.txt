@@ -1,0 +1,13 @@
+{
+  "memory_hog": {
+    "exit_code": "137",
+    "oom_killed": "true",
+    "limit": "128m"
+  },
+  "fork_loop": {
+    "output": "fork blocked after 31 children: [Errno 11] Resource temporarily unavailable",
+    "pids_limit": 32
+  },
+  "cleanup_confirmed": true
+}
+STRESS OK: memory hog killed (137), fork loop capped, nothing left behind

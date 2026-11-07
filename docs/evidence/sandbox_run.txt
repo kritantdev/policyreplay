@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 268, in <module>
+    r = run_case(c, ROOT / "runs" / "sandbox")
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 250, in run_case
+    return run_scenario(rule, sc, c["profile"], Path(outdir) / c["name"])
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 173, in run_scenario
+    ev.mkdir(parents=True)
+  File "/usr/lib/python3.12/pathlib.py", line 1313, in mkdir
+    os.mkdir(self, mode)
+FileExistsError: [Errno 17] File exists: '/home/deploy/policyreplay/runs/sandbox/buggy_15000/evidence'

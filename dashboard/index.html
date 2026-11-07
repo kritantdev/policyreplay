@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PolicyReplay: Workflow Red Team</title>
+<style>
+:root{--bg:#0e1319;--panel:#161d26;--panel2:#1b2430;--line:#2a3646;--text:#e8eef5;--muted:#93a1b3;
+--accent:#5aa2ff;--red:#ff6b6b;--green:#43d29b;--amber:#f6bd4b;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 24px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:22px}.tag{margin:2px 0 0;color:var(--muted);font-size:13px}
+h2{margin:0 0 12px;font-size:17px}h3{margin:16px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+nav.tabs{display:flex;gap:6px;padding:12px 24px 0;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:10px 14px;font:inherit;cursor:pointer;white-space:nowrap}
+nav.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+main{max-width:1100px;margin:0 auto;padding:20px 24px 60px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.5 var(--mono);resize:vertical}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font:inherit;cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--accent)}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#04111f;font-weight:600}
+.muted{color:var(--muted)}.small{font-size:13px}.mono{font-family:var(--mono);font-size:12.5px}
+.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line);color:var(--muted);vertical-align:middle}
+.chip.ok{color:var(--green);border-color:var(--green)}.chip.warn{color:var(--amber);border-color:var(--amber)}.chip.bad{color:var(--red);border-color:var(--red)}
+.badge{display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-size:12px;letter-spacing:.03em}
+.badge.VIOLATION{background:var(--red);color:#2a0606}.badge.PASS{background:var(--green);color:#04281b}
+.badge.INCONCLUSIVE{background:var(--amber);color:#2b1d02}.badge.PENDING{background:var(--line);color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px}
+blockquote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--accent);color:var(--text);background:var(--bg)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13.5px}
+th{color:var(--muted);font-weight:600}
+.bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden}.bar>div{height:100%;width:0;background:var(--accent);transition:width .3s}
+.case{border:1px solid var(--line);border-radius:8px;margin:10px 0;background:var(--panel2)}
+.case>.hd{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;align-items:center}
+.case ul{list-style:none;margin:0;padding:0 12px 10px;font-size:13px}.case li{padding:1px 0;color:var(--muted)}
+.case li.ok{color:var(--text)}.case li.bad{color:var(--red)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px}
+.tile{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px}.tile b{display:block;font-size:26px}
+.banner{border:1px solid var(--red);background:#2a1214;border-radius:10px;padding:16px;margin-bottom:16px}
+.banner .big{font-size:19px;font-weight:700;margin-bottom:6px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:760px){.pair{grid-template-columns:1fr}main{padding:14px}header.top{padding:14px}}
+details{margin-top:8px}summary{cursor:pointer;color:var(--accent);font-size:13px}
+pre{margin:6px 0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;overflow:auto;font:12px/1.45 var(--mono);white-space:pre-wrap;word-break:break-word}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:8px}
+.shots a{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg);color:var(--muted);font-size:11px;text-decoration:none}
+.shots img{display:block;width:100%}.shots span{display:block;padding:3px 6px}
+.err{color:var(--red)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>PolicyReplay <span class="muted" style="font-weight:400">· Workflow Red Team</span></h1>
+  <p class="tag">Written policy → adversarial browser test → independent proof. The LLM interprets and plans; code proves.</p></div>
+  <div id="mode" class="chip">connecting…</div>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="1" class="on">1 · Policy &amp; rules</button>
+  <button data-tab="2">2 · Live run</button>
+  <button data-tab="3">3 · Evidence report</button>
+</nav>
+<main>
+<section id="s1">
+  <div class="panel">
+    <h2>Business policy</h2>
+    <textarea id="policy" rows="9" maxlength="4000" aria-label="Policy text"></textarea>
+    <div class="row"><button id="analyze" class="btn primary">Extract rules &amp; generate scenarios</button>
+    <span id="analyze-msg" class="small muted"></span></div>
+  </div>
+  <div id="analysis" hidden>
+    <div class="panel"><h2>Extracted rules <span id="src" class="chip"></span></h2>
+      <div id="rules" class="grid"></div><div id="unsupported"></div></div>
+    <div class="panel"><h2>Adversarial scenarios <span class="chip warn">human approval required</span></h2>
+      <p class="small muted" style="margin-top:0">Nothing runs until you approve. Every approved scenario runs against a buggy build and a correct build of the same app.</p>
+      <div style="overflow-x:auto"><table id="scenarios"><thead><tr><th></th><th>Test</th><th>Rule</th><th>Actor</th><th>Expected</th><th>Browser steps</th></tr></thead><tbody></tbody></table></div>
+      <div class="row"><button id="approve" class="btn">Approve selected scenarios</button>
+      <button id="run" class="btn primary" disabled>Run approved scenarios</button><span id="approve-msg" class="small muted"></span></div></div>
+  </div>
+</section>
+
+<section id="s2" hidden>
+  <div class="panel"><h2 id="run-title">Live run</h2>
+    <p id="live-msg" class="small muted">No run yet. Approve scenarios on screen 1 and press Run.</p>
+    <div class="bar"><div id="bar"></div></div>
+    <div id="cases"></div><div id="summary" class="tiles"></div>
+    <div class="row"><button id="open-report" class="btn primary" hidden>Open evidence report</button></div></div>
+</section>
+
+<section id="s3" hidden><div id="report"><div class="panel muted">The evidence report appears here after a run finishes.</div></div></section>
+</main>
+
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state={analysis:null,runId:null,es:null,done:0,total:0,finished:false,report:null,approved:[]};
+
+async function api(method,path,body){
+  const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
+  let data=null;try{data=await r.json()}catch(e){}
+  if(!r.ok){const d=data&&data.detail;throw new Error(typeof d==="string"?d:(Array.isArray(d)?d.map(x=>x.msg).join("; "):"request failed ("+r.status+")"))}
+  return data;
+}
+function showTab(n){
+  for(const b of document.querySelectorAll("#tabs button"))b.classList.toggle("on",b.dataset.tab===String(n));
+  for(const i of [1,2,3])$("#s"+i).hidden=i!==n;
+}
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>showTab(+b.dataset.tab));
+
+function stepText(s){
+  switch(s.action){
+    case"login":return`login(${s.role})`;case"goto":return`goto(${s.path})`;
+    case"fill":return`fill(${s.testid}=${s.value})`;case"click":return`click(${s.testid})`;
+    case"select":return`select(${s.testid}=${s.value})`;case"expect":return`expect(${s.testid}${s.text?`="${s.text}"`:""})`;
+    default:return s.action;}
+}
+const badge=v=>`<span class="badge ${esc(v||"PENDING")}">${esc(v||"PENDING")}</span>`;
+
+async function init(){
+  try{const h=await api("GET","/api/health");const el=$("#mode");
+    el.textContent=h.mode;el.className="chip "+(h.mode.startsWith("docker")?"ok":"warn");
+    if(!h.mode.startsWith("docker"))el.title="Local mode: no container isolation. Development only.";
+  }catch(e){$("#mode").textContent="API unreachable";$("#mode").className="chip bad"}
+  try{$("#policy").value=(await api("GET","/api/policy")).policy_text}catch(e){}
+}
+
+$("#analyze").onclick=async()=>{
+  const b=$("#analyze"),m=$("#analyze-msg");b.disabled=true;m.className="small muted";m.textContent="Analyzing… (a live model call can take 10–30 s)";
+  try{state.analysis=await api("POST","/api/analyze",{policy_text:$("#policy").value});m.textContent="";renderAnalysis(state.analysis)}
+  catch(e){m.className="small err";m.textContent=e.message}
+  finally{b.disabled=false}
+};
+
+function renderAnalysis(a){
+  $("#analysis").hidden=false;
+  const live=a.source.rules==="model"&&a.source.scenarios==="model";
+  const src=$("#src");
+  src.textContent=live?"live model output":(a.source.rules===a.source.scenarios?a.source.rules:`rules: ${a.source.rules} · scenarios: ${a.source.scenarios}`);
+  src.className="chip "+(live?"ok":"warn");
+  $("#rules").innerHTML=a.rules.map(r=>`<div class="card"><b>${esc(r.rule_id)}</b> <span class="chip">${esc(r.invariant_type)}</span>
+    <blockquote>${esc(r.source_clause)}</blockquote>
+    <div class="small muted">actor: ${esc(r.actor)} · action: ${esc(r.action)}${Object.keys(r.params).length?` · params: <span class="mono">${esc(JSON.stringify(r.params))}</span>`:""}</div></div>`).join("");
+  $("#unsupported").innerHTML=a.unsupported.length?`<h3>Not tested</h3>`+a.unsupported.map(u=>
+    `<div class="small" style="margin:4px 0">${esc(u)} <span class="chip warn">no verifier yet — not tested</span></div>`).join(""):"";
+  $("#scenarios tbody").innerHTML=a.scenarios.map(s=>`<tr><td><input type="checkbox" class="pick" value="${esc(s.test_id)}" checked></td>
+    <td><b>${esc(s.test_id)}</b></td><td>${esc(s.rule_id)}</td><td>${esc(s.actor_role)}</td>
+    <td><span class="chip ${s.expected_outcome==="blocked"?"warn":"ok"}">${esc(s.expected_outcome)}</span></td>
+    <td class="mono">${s.steps.map(x=>esc(stepText(x))).join(" → ")}</td></tr>`).join("");
+  $("#run").disabled=true;$("#approve-msg").textContent="";
+}
+
+$("#approve").onclick=async()=>{
+  const ids=[...document.querySelectorAll(".pick:checked")].map(x=>x.value),m=$("#approve-msg");
+  if(!ids.length){m.className="small err";m.textContent="Select at least one scenario.";return}
+  try{const r=await api("POST",`/api/analyses/${state.analysis.analysis_id}/approve`,{test_ids:ids});
+    state.approved=r.approved;m.className="small";m.style.color="var(--green)";m.textContent=`Approved ${r.approved.length} scenario(s) at ${r.approved_at} (UTC)`;$("#run").disabled=false}
+  catch(e){m.className="small err";m.textContent=e.message}
+};
+$("#run").onclick=async()=>{
+  const m=$("#approve-msg");
+  try{const r=await api("POST","/api/runs",{analysis_id:state.analysis.analysis_id,test_ids:state.approved});
+    showTab(2);startStream(r.run_id)}
+  catch(e){m.className="small err";m.style.color="";m.textContent=e.message}
+};
+
+function startStream(runId){
+  if(state.es)state.es.close();
+  Object.assign(state,{runId,done:0,total:0,finished:false,report:null});
+  $("#cases").innerHTML="";$("#summary").innerHTML="";$("#bar").style.width="0%";$("#open-report").hidden=true;
+  $("#report").innerHTML='<div class="panel muted">The evidence report appears here after a run finishes.</div>';
+  $("#run-title").textContent="Live run "+runId;$("#live-msg").className="small muted";$("#live-msg").textContent="Starting…";
+  const es=new EventSource(`/api/runs/${runId}/events`);state.es=es;
+  const on=(t,f)=>es.addEventListener(t,e=>f(JSON.parse(e.data)));
+  const log=(cid,cls,text)=>{const u=document.getElementById("log-"+cid);if(u){const li=document.createElement("li");li.className=cls;li.textContent=text;u.appendChild(li)}};
+  on("run_started",d=>{state.total=d.total;$("#live-msg").textContent=`Running ${d.total} cases · mode: ${d.mode}`});
+  on("case_started",d=>{const div=document.createElement("div");div.className="case";
+    div.innerHTML=`<div class="hd"><span><b>${esc(d.test_id)}</b> · <span class="chip ${d.profile==="buggy"?"warn":"ok"}">${esc(d.profile)} build</span> <span class="muted small">${esc(d.rule_id)}</span></span><span id="v-${esc(d.case_id)}">${badge()}</span></div><ul id="log-${esc(d.case_id)}"></ul>`;
+    $("#cases").appendChild(div)});
+  on("stage",d=>log(d.case_id,"",`• ${d.text}`));
+  on("step",d=>log(d.case_id,d.ok?"ok":"bad",`${d.ok?"✓":"✗"} step ${d.n}: ${d.action} ${d.detail||""}${d.error?" — "+d.error:""}`));
+  on("verdict",d=>{const el=document.getElementById("v-"+d.case_id);if(el)el.innerHTML=badge(d.verdict);log(d.case_id,d.verdict==="INCONCLUSIVE"?"bad":"ok",`→ ${d.verdict}: ${(d.reasons||[]).join(" ")}`)});
+  on("cleanup",d=>log(d.case_id,d.confirmed?"ok":"bad",`${d.confirmed?"✓":"✗"} environment cleanup ${d.confirmed?"confirmed":"FAILED"}`));
+  on("case_finished",()=>{state.done++;$("#bar").style.width=(100*state.done/Math.max(state.total,1))+"%"});
+  on("run_finished",async d=>{state.finished=true;es.close();$("#live-msg").textContent="Run finished.";renderSummary(d.summary);await loadReport()});
+  on("run_failed",d=>{state.finished=true;es.close();$("#live-msg").className="small err";$("#live-msg").textContent="Run failed: "+d.error});
+  es.onerror=()=>{if(!state.finished)$("#live-msg").textContent="Connection interrupted, reconnecting…"};
+}
+function renderSummary(s){
+  const clean=s.cleanup_confirmed===null?"n/a (local mode)":(s.cleanup_confirmed?"yes":"NO");
+  $("#summary").innerHTML=[
+    [s.planted_violations_detected,"planted violations detected (buggy build)",s.planted_violations_detected>0?"ok":"warn"],
+    [s.false_positives_on_correct_build,"false positives on the correct build",s.false_positives_on_correct_build===0?"ok":"bad"],
+    [s.inconclusive,"inconclusive",s.inconclusive===0?"ok":"warn"],
+    [clean,"all environments destroyed",s.cleanup_confirmed===false?"bad":(s.cleanup_confirmed?"ok":"warn")]
+  ].map(t=>`<div class="tile"><b class="${t[2]==="ok"?"":""}">${esc(t[0])}</b><span class="small muted">${esc(t[1])}</span> <span class="chip ${t[2]}">${t[2]==="ok"?"ok":t[2]==="bad"?"check":"note"}</span></div>`).join("");
+}
+$("#open-report").onclick=()=>showTab(3);
+
+async function loadReport(){
+  try{state.report=await api("GET",`/api/runs/${state.runId}/report`);renderReport(state.report);$("#open-report").hidden=false}
+  catch(e){$("#report").innerHTML=`<div class="panel err">Could not load report: ${esc(e.message)}</div>`}
+}
+function kv(o){return Object.entries(o||{}).map(([k,v])=>`${esc(k)}: ${esc(typeof v==="object"?JSON.stringify(v):v)}`).join("\n")}
+function envBlock(env){
+  if(!env)return"";
+  let h=`<h3>Environment</h3><div class="small">mode: <b>${esc(env.mode)}</b>`;
+  if(env.cleanup_confirmed!==undefined)h+=` · cleanup <span class="chip ${env.cleanup_confirmed?"ok":"bad"}">${env.cleanup_confirmed?"confirmed":"FAILED"}</span>`;
+  h+=`</div>`;
+  if(env.note)h+=`<div class="small muted">${esc(env.note)}</div>`;
+  const c=env.containment||{};
+  if(c.app||c.worker){h+=`<pre>network internal: ${esc(c.network_internal)}\napp:    ${esc(JSON.stringify(c.app))}\nworker: ${esc(JSON.stringify(c.worker))}</pre>`}
+  return h;
+}
+function buildCard(c){
+  const trace=(c.trace||[]).map(s=>`${s.ok?"✓":"✗"} ${s.step}. ${stepText(s)}${s.error?" — "+s.error:""}`).join("\n");
+  const shots=(c.trace||[]).filter(s=>s.screenshot).map(s=>`<a href="${esc(s.screenshot)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(s.screenshot)}" alt="step ${esc(s.step)}"><span>step ${esc(s.step)} · ${esc(s.action)}</span></a>`).join("");
+  const hashes=Object.entries({...(c.artifact_sha256||{}),...(c.manifest_sha256||{})}).map(([k,v])=>`${k}  ${v}`).join("\n");
+  return `<div class="card"><div><span class="chip ${c.profile==="buggy"?"warn":"ok"}">${esc(c.profile)} build</span> ${badge(c.verdict)}</div>
+   <p class="small" style="margin:8px 0">${esc((c.reasons||[]).join(" "))}</p>
+   <details><summary>Evidence</summary>
+     <h3>Browser actions</h3><pre>${esc(trace)||"(none)"}</pre>
+     ${shots?`<div class="shots">${shots}</div>`:""}
+     <h3>Verification checks</h3><pre>${esc(kv(c.checks))}</pre>
+     <h3>Observed application state</h3><pre>${esc(JSON.stringify(c.observed,null,2))}</pre>
+     <h3>Artifact hashes (sha256)</h3><pre>${esc(hashes)||"(none)"}</pre>
+     ${envBlock(c.environment)}
+   </details></div>`;
+}
+function renderReport(rep){
+  const cases=rep.cases||[];
+  const flag=cases.find(c=>c.verdict==="VIOLATION"&&c.profile==="buggy"&&c.rule&&c.rule.rule_id==="P-01")||cases.find(c=>c.verdict==="VIOLATION");
+  let h="";
+  if(flag)h+=`<div class="banner"><div class="big">The policy said no. The application said yes. PolicyReplay proved it.</div>
+    <blockquote>${esc(flag.policy_clause)}</blockquote><div class="small">${esc((flag.reasons||[]).join(" "))}</div></div>`;
+  const s=rep.summary;
+  h+=`<div class="panel"><h2>Evidence report <span class="muted small">run ${esc(rep.run_id)}</span></h2>
+    <div class="small muted">execution: ${esc(rep.execution_mode)} · model output: rules ${esc(rep.model_output.rules)}, scenarios ${esc(rep.model_output.scenarios)} · human approval: ${esc(rep.human_approved_at||"n/a")}</div>
+    ${s?`<div class="small" style="margin-top:6px">${esc(s.planted_violations_detected)} planted violation(s) detected · ${esc(s.false_positives_on_correct_build)} false positive(s) on the correct build · ${esc(s.inconclusive)} inconclusive</div>`:""}
+    <div class="row"><a class="btn" href="/api/runs/${esc(rep.run_id)}/report" target="_blank" rel="noopener">Download report (JSON)</a></div></div>`;
+  const byTest={};for(const c of cases)(byTest[c.test_id]=byTest[c.test_id]||[]).push(c);
+  for(const [tid,cs] of Object.entries(byTest)){
+    const first=cs[0];
+    h+=`<div class="panel"><h2>${esc(tid)} <span class="muted small">${esc(first.rule.rule_id)}</span></h2>
+      <blockquote>${esc(first.policy_clause)}</blockquote>
+      <div class="small muted">actor: ${esc(first.scenario.actor_role)} · expected: ${esc(first.scenario.expected_outcome)} · plan: <span class="mono">${first.scenario.steps.map(x=>esc(stepText(x))).join(" → ")}</span></div>
+      <div class="pair" style="margin-top:10px">${["buggy","correct"].map(p=>{const c=cs.find(x=>x.profile===p);return c?buildCard(c):""}).join("")}</div></div>`;
+  }
+  h+=`<div class="panel"><h2>Limitations</h2><ul class="small">${(rep.limitations||[]).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>`;
+  $("#report").innerHTML=h;
+}
+init();
+</script>
+</body>
+</html>

@@ -240,6 +240,10 @@ def create_api(runs_dir=None, runner=None, mode_label=None, transport=None, limi
             raise HTTPException(404, "not found")
         return FileResponse(f)
 
+    @app.get("/", include_in_schema=False)
+    def index():
+        return FileResponse(ROOT / "dashboard" / "index.html")
+
     return app
 
 

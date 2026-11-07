@@ -76,11 +76,18 @@ Each run creates a Docker network with `--internal` (no egress) and two containe
 --pids-limit  --memory  --cpus   (tmpfs for /tmp and the app's /data)
 ```
 
+Limits as configured, confirmed from `docker inspect` output recorded in every run's report (`docs/evidence/gate_report.txt`):
+
+| Container | Processes | Memory | CPU | User |
+|---|---|---|---|---|
+| Target app | 128 | 256 MB | 0.5 | 10001 |
+| Playwright worker | 256 | 1 GB | 1.0 | 10001 |
+
 No Docker socket and no API keys inside any container. The only host mounts are the read-only plan file and the run's
 evidence directory. Snapshots leave the app container through `docker exec`, and the verifier runs on the host. After
 each run both containers and the network are removed and the before/after inventory is recorded.
 
-Tested with `python orchestrator/sandbox_run.py probe | stress | run` (outputs in `docs/evidence/`):
+Tested with `python orchestrator/sandbox_run.py probe`, `stress` and `run` (outputs in `docs/evidence/`). On the Vultr VM, five consecutive full runs through the public dashboard each detected the 3 planted violations with 0 false positives, 0 inconclusive verdicts and confirmed cleanup (`docs/evidence/gate_report.txt`):
 
 | Test | Result |
 |---|---|

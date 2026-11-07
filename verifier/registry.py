@@ -220,7 +220,7 @@ def role_change_admin_only(rule, scenario, pre, post, http_log):
         status = int(attempts[-1]["status"])
     except (KeyError, TypeError, ValueError):
         return _inc("attempt log entry has no usable role or status", checks)
-    if new_role not in VALID_ROLES:
+    if not isinstance(new_role, str) or new_role not in VALID_ROLES:
         return _inc("attempted role is not a known role", checks)
     pre_role = pre_row[0]
     checks["precondition_role_differs"] = pre_role != new_role
@@ -258,3 +258,156 @@ def role_change_admin_only(rule, scenario, pre, post, http_log):
         return Result("PASS", [f"role change by a {actor} was blocked (HTTP {status}); "
                                f"role unchanged and no change applied"], checks, observed)
     return _inc("conflicting evidence between HTTP log, users table and audit log", checks, observed)
+
+
+NON_CANCELLABLE = {"shipped", "delivered"}
+CANCELLABLE = {"placed", "processing"}
+
+
+def no_cancel_after_ship(rule, scenario, pre, post, http_log):
+    """P-03. An order that is shipped or delivered cannot be cancelled; placed or processing can.
+
+    Evidence (all must agree): the browser-observed HTTP status for POST /orders/<id>/cancel, the
+    order's status before vs after, and the order_status_changes audit row, which records the
+    status AT THE TIME of the attempt and whether the change was applied.
+    Limitation: the audit table is maintained by the app under test.
+    """
+    try:
+        order_id = int(scenario.preconditions["order_id"])
+        declared = scenario.preconditions["order_status"]
+    except (KeyError, TypeError, ValueError):
+        return _inc("scenario order_id or order_status missing or invalid")
+    if not isinstance(declared, str) or declared not in NON_CANCELLABLE | CANCELLABLE:
+        return _inc("scenario order_status is not a known status")
+
+    checks, observed = {}, {}
+    try:
+        pre_row = pre.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+        pre_ids = {r[0] for r in pre.execute(
+            "SELECT id FROM order_status_changes WHERE order_id=?", (order_id,))}
+    except sqlite3.Error as e:
+        return _inc(f"pre-run snapshot unreadable: {e}")
+    checks["precondition_order_exists"] = pre_row is not None
+    checks["precondition_status_matches"] = bool(pre_row) and pre_row[0] == declared
+    if not all(checks.values()):
+        return _inc("seed state does not match scenario preconditions", checks)
+    pre_status = pre_row[0]
+
+    attempts = [e for e in http_log
+                if e.get("method") == "POST" and e.get("path") == f"/orders/{order_id}/cancel"]
+    checks["attempt_logged"] = bool(attempts)
+    if not attempts:
+        return _inc("cancellation attempt not found in HTTP log", checks)
+    try:
+        status = int(attempts[-1]["status"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("attempt log entry has no usable status", checks)
+    observed["attempt"] = {"order_id": order_id, "status": status}
+
+    try:
+        post_row = post.execute("SELECT status FROM orders WHERE id=?", (order_id,)).fetchone()
+        post_audit = post.execute("SELECT id, old_status, new_status, applied FROM order_status_changes "
+                                  "WHERE order_id=?", (order_id,)).fetchall()
+    except sqlite3.Error as e:
+        return _inc(f"post-run snapshot unreadable: {e}", checks, observed)
+    if post_row is None:
+        return _inc("order missing from post-run snapshot", checks, observed)
+    post_status = post_row[0]
+    new_audit = [list(r) for r in post_audit if r[0] not in pre_ids]
+    applied = [a for a in new_audit if a[3] == 1 and a[1] == pre_status and a[2] == "cancelled"]
+    observed.update(status_before=pre_status, status_after=post_status, new_audit_rows=new_audit)
+    cancelled = post_status == "cancelled"
+
+    if pre_status in CANCELLABLE:        # positive control: the invariant is not engaged
+        if status == 200 and cancelled and applied:
+            checks["invariant_upheld"] = True
+            return Result("PASS", [f"order {order_id} was {pre_status} and was cancelled; permitted"],
+                          checks, observed)
+        return _inc("cancellation of a cancellable order was not observed end to end", checks, observed)
+
+    if status == 200 and cancelled and applied:
+        checks["invariant_upheld"] = False
+        return Result("VIOLATION", [f"order {order_id} was {pre_status} and was cancelled anyway; "
+                                    f"shipped orders cannot be cancelled"], checks, observed)
+    if status in (403, 409) and post_status == pre_status and not any(a[3] == 1 for a in new_audit):
+        checks.update(attempt_blocked=True, invariant_upheld=True)
+        return Result("PASS", [f"cancellation of {pre_status} order {order_id} was blocked "
+                               f"(HTTP {status}); status unchanged and no change applied"], checks, observed)
+    return _inc("conflicting evidence between HTTP log, orders table and audit log", checks, observed)
+
+
+def max_discount_pct(rule, scenario, pre, post, http_log):
+    """P-04. A discount may not exceed the rule's maximum percent (strictly greater is a violation:
+    30 is allowed, 31 is not). The maximum comes from the validated Rule, never from the model or
+    the scenario; the attempted percent is read from the observed HTTP log.
+
+    Evidence (all must agree): the HTTP status for POST /orders/<id>/discount, the order's
+    discount_pct before vs after, and the discount_changes audit row.
+    Limitation: the audit table is maintained by the app under test.
+    """
+    try:
+        maximum = rule.params["max_percent"]
+        if set(rule.params) != {"max_percent"} or isinstance(maximum, bool) or not isinstance(maximum, int) \
+                or not 1 <= maximum <= 100:
+            raise ValueError
+        order_id = int(scenario.preconditions["order_id"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("rule max_percent or scenario order_id missing or invalid")
+
+    checks, observed = {}, {}
+    try:
+        pre_row = pre.execute("SELECT discount_pct FROM orders WHERE id=?", (order_id,)).fetchone()
+        pre_ids = {r[0] for r in pre.execute(
+            "SELECT id FROM discount_changes WHERE order_id=?", (order_id,))}
+    except sqlite3.Error as e:
+        return _inc(f"pre-run snapshot unreadable: {e}")
+    checks["precondition_order_exists"] = pre_row is not None
+    checks["precondition_discount_within_max"] = bool(pre_row) and pre_row[0] is not None \
+        and 0 <= pre_row[0] <= maximum
+    if not all(checks.values()):
+        return _inc("seed state does not match scenario preconditions", checks)
+    pre_pct = pre_row[0]
+
+    attempts = [e for e in http_log
+                if e.get("method") == "POST" and e.get("path") == f"/orders/{order_id}/discount"]
+    checks["attempt_logged"] = bool(attempts)
+    if not attempts:
+        return _inc("discount attempt not found in HTTP log", checks)
+    try:
+        percent = int(attempts[-1]["form"]["percent"])
+        status = int(attempts[-1]["status"])
+    except (KeyError, TypeError, ValueError):
+        return _inc("attempt log entry has no usable percent or status", checks)
+    if not 0 <= percent <= 100:
+        return _inc("attempted percent is outside 0..100", checks)
+    observed["attempt"] = {"order_id": order_id, "percent": percent, "status": status, "maximum": maximum}
+
+    try:
+        post_row = post.execute("SELECT discount_pct FROM orders WHERE id=?", (order_id,)).fetchone()
+        post_audit = post.execute("SELECT id, old_pct, new_pct, applied FROM discount_changes "
+                                  "WHERE order_id=?", (order_id,)).fetchall()
+    except sqlite3.Error as e:
+        return _inc(f"post-run snapshot unreadable: {e}", checks, observed)
+    if post_row is None:
+        return _inc("order missing from post-run snapshot", checks, observed)
+    post_pct = post_row[0]
+    new_audit = [list(r) for r in post_audit if r[0] not in pre_ids]
+    applied = [a for a in new_audit if a[3] == 1 and a[1] == pre_pct and a[2] == percent]
+    observed.update(discount_before=pre_pct, discount_after=post_pct, new_audit_rows=new_audit)
+
+    if percent <= maximum:               # boundary / allowed: the invariant is not engaged
+        if status == 200 and post_pct == percent and applied:
+            checks["invariant_upheld"] = True
+            return Result("PASS", [f"discount of {percent}% is at or below {maximum}%; allowed and applied"],
+                          checks, observed)
+        return _inc("allowed discount was not observed end to end", checks, observed)
+
+    if status == 200 and post_pct == percent and applied:
+        checks["invariant_upheld"] = False
+        return Result("VIOLATION", [f"a discount of {percent}% was applied; discounts cannot exceed {maximum}%"],
+                      checks, observed)
+    if status in (403, 422) and post_pct == pre_pct and not any(a[3] == 1 for a in new_audit):
+        checks.update(attempt_blocked=True, invariant_upheld=True)
+        return Result("PASS", [f"discount of {percent}% was blocked (HTTP {status}); discount unchanged "
+                               f"and no change applied"], checks, observed)
+    return _inc("conflicting evidence between HTTP log, orders table and audit log", checks, observed)

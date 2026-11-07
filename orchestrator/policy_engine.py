@@ -28,6 +28,9 @@ MODEL, REPLAYED = "model", "replayed model output"
 # Target-app profile (what a tester would get from API docs). Seeded state is fixed.
 ORDER_TOTAL = {1001: 20000, 1002: 8000}
 CUSTOMER_OWN_ORDER = 1001   # the 'customer' login (alice) owns 1001; bob owns 1002
+# P-03 orders, both owned by the 'customer' login (alice). Status is part of the fixed seed.
+CANCEL_ORDER_STATUS = {1003: "shipped", 1004: "processing"}
+NON_CANCELLABLE = {"shipped", "delivered"}
 USER_IDS = {1, 2, 3, 4, 5}  # 1 support1, 2 manager1, 3 admin1, 4 alice, 5 bob
 ROLES = {"support", "manager", "admin", "customer"}
 
@@ -38,6 +41,8 @@ invariant_type must be exactly one of:
 - "approval_required_over_threshold": params {"threshold": <integer INR>}
 - "owner_only_access": params {}
 - "role_change_admin_only": params {}
+- "no_cancel_after_ship": params {} (orders that are shipped or delivered cannot be cancelled)
+- "max_discount_pct": params {"max_percent": <integer 1..100, copied from the clause>}
 Use the policy's own ids (e.g. P-01) as rule_id. source_clause must be copied VERBATIM from the policy.
 Clauses that fit neither type go in unsupported_clauses (copied verbatim). Never invent clauses or numbers."""
 
@@ -58,6 +63,17 @@ role_change_admin_only scenarios: preconditions {"target_user_id":N}; steps = lo
 goto /users, {"action":"select","testid":"role-select-N","value":<role>}, click role-submit-N.
 Include one adversarial self-promotion (support, target 1, value admin) and one positive control
 (login admin, target 4, value manager). Roles: support, manager, admin, customer.
+Customer 'customer' also owns order 1003 (status shipped, total 5000) and order 1004 (status processing,
+total 3000). Testid on /orders/<id> for cancelling: cancel-submit (no input field).
+no_cancel_after_ship scenarios: preconditions {"order_id":N,"order_status":S} with N 1003 and S "shipped", or
+N 1004 and S "processing"; steps = login customer, goto /orders/N, click cancel-submit.
+Include one adversarial scenario (order 1003, shipped, test id P-03-ADV-001) and one positive control
+(order 1004, processing, test id P-03-CTL-001).
+Testids on /orders/<id> for discounts (staff only): discount-percent (input), discount-submit.
+max_discount_pct scenarios: preconditions {"order_id":1004}; steps = login support, goto /orders/1004,
+fill discount-percent (integer string 0..100), click discount-submit.
+Include one adversarial scenario with a percent above the maximum (support, 40, test id P-04-ADV-001) and
+one boundary scenario at exactly the maximum (support, 30, test id P-04-BND-001).
 Use test_ids like P-01-ADV-001, P-01-BND-001. Give 1-3 scenarios per rule."""
 
 
@@ -76,8 +92,15 @@ def check_rule(rule, policy_text):
         nums = {int(n) for n in re.findall(r"\d+", re.sub(r"(?<=\d),(?=\d)", "", rule.source_clause))}
         if th not in nums:
             raise ValueError(f"{rule.rule_id}: threshold {th} does not appear in the source clause")
+    elif rule.invariant_type == "max_discount_pct":
+        mx = rule.params.get("max_percent")
+        if set(rule.params) != {"max_percent"} or not isinstance(mx, int) or isinstance(mx, bool) \
+                or not 1 <= mx <= 100:
+            raise ValueError(f"{rule.rule_id}: params must be exactly {{'max_percent': int 1..100}}")
+        if mx not in {int(n) for n in re.findall(r"\d+", rule.source_clause)}:
+            raise ValueError(f"{rule.rule_id}: max_percent {mx} does not appear in the source clause")
     elif rule.params:
-        raise ValueError(f"{rule.rule_id}: owner_only_access takes no params")
+        raise ValueError(f"{rule.rule_id}: {rule.invariant_type} takes no params")
 
 
 def _parse_rules(obj, policy_text):
@@ -151,6 +174,44 @@ def check_scenario(sc, rule):
         if not sel or not clk or max(clk) < min(sel):
             raise ValueError(f"{sc.test_id}: plan must select a valid role then click role-submit-{tid}")
         outcome = "allowed" if sc.actor_role == "admin" else "blocked"
+    elif t == "no_cancel_after_ship":
+        if set(pre) != {"order_id", "order_status"}:
+            raise ValueError(f"{sc.test_id}: preconditions must be exactly order_id + order_status")
+        oid = _int(pre["order_id"], f"{sc.test_id}: order_id")
+        if oid not in CANCEL_ORDER_STATUS:
+            raise ValueError(f"{sc.test_id}: order {oid} is not a cancellation test order")
+        if pre["order_status"] != CANCEL_ORDER_STATUS[oid]:
+            raise ValueError(f"{sc.test_id}: order {oid} is {CANCEL_ORDER_STATUS[oid]} in the seed data")
+        if sc.actor_role != "customer":
+            raise ValueError(f"{sc.test_id}: must be the customer cancelling their own order")
+        if not opens(f"/orders/{oid}"):
+            raise ValueError(f"{sc.test_id}: plan never opens /orders/{oid}")
+        gi = [i for i, x in enumerate(steps) if x["action"] == "goto" and x["path"] == f"/orders/{oid}"]
+        clk = [i for i, x in enumerate(steps) if x["action"] == "click" and x["testid"] == "cancel-submit"]
+        if not clk or min(clk) < min(gi):
+            raise ValueError(f"{sc.test_id}: plan must open the order before it clicks cancel-submit")
+        outcome = "blocked" if CANCEL_ORDER_STATUS[oid] in NON_CANCELLABLE else "allowed"
+    elif t == "max_discount_pct":
+        if set(pre) != {"order_id"}:
+            raise ValueError(f"{sc.test_id}: preconditions must be exactly order_id")
+        oid = _int(pre["order_id"], f"{sc.test_id}: order_id")
+        if oid not in ORDER_TOTAL and oid not in CANCEL_ORDER_STATUS:
+            raise ValueError(f"{sc.test_id}: unknown order {oid}")
+        if sc.actor_role not in {"support", "manager", "admin"}:
+            raise ValueError(f"{sc.test_id}: only staff roles can apply discounts")
+        if not opens(f"/orders/{oid}"):
+            raise ValueError(f"{sc.test_id}: plan never opens /orders/{oid}")
+        gi = min(i for i, x in enumerate(steps) if x["action"] == "goto" and x["path"] == f"/orders/{oid}")
+        fills = [(i, x) for i, x in enumerate(steps) if x["action"] == "fill" and x["testid"] == "discount-percent"]
+        clk = [i for i, x in enumerate(steps) if x["action"] == "click" and x["testid"] == "discount-submit"]
+        if not fills or not clk or not fills[-1][1]["value"].isdigit() or not fills[-1][1]["value"].isascii():
+            raise ValueError(f"{sc.test_id}: plan must fill discount-percent (digits) and click discount-submit")
+        pct = int(fills[-1][1]["value"])
+        if not 0 <= pct <= 100:
+            raise ValueError(f"{sc.test_id}: discount percent outside 0..100")
+        if min(i for i, _ in fills) < gi or max(clk) < fills[-1][0] or min(clk) < gi:
+            raise ValueError(f"{sc.test_id}: plan must open the order, fill the percent, then click discount-submit")
+        outcome = "blocked" if pct > rule.params["max_percent"] else "allowed"
     else:
         raise ValueError(f"no scenario checks for {t}")
     return sc.model_copy(update={"expected_outcome": outcome})

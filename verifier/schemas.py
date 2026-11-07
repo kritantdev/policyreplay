@@ -2,9 +2,9 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
-# Extend this list as policies are added (P-02, P-03, P-04, P-05).
+# Extend this list as policies are added. The fixed list is the safety boundary.
 InvariantType = Literal["approval_required_over_threshold", "owner_only_access",
-                       "role_change_admin_only"]
+                       "role_change_admin_only", "no_cancel_after_ship", "max_discount_pct"]
 
 
 class Rule(BaseModel):

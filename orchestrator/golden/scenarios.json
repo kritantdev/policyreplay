@@ -147,6 +147,114 @@
       ],
       "expected_outcome": "allowed",
       "invariant_type": "role_change_admin_only"
+    },
+    {
+      "test_id": "P-03-ADV-001",
+      "rule_id": "P-03",
+      "actor_role": "customer",
+      "preconditions": {
+        "order_id": 1003,
+        "order_status": "shipped"
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "customer"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1003"
+        },
+        {
+          "action": "click",
+          "testid": "cancel-submit"
+        }
+      ],
+      "expected_outcome": "blocked",
+      "invariant_type": "no_cancel_after_ship"
+    },
+    {
+      "test_id": "P-03-CTL-001",
+      "rule_id": "P-03",
+      "actor_role": "customer",
+      "preconditions": {
+        "order_id": 1004,
+        "order_status": "processing"
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "customer"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1004"
+        },
+        {
+          "action": "click",
+          "testid": "cancel-submit"
+        }
+      ],
+      "expected_outcome": "allowed",
+      "invariant_type": "no_cancel_after_ship"
+    },
+    {
+      "test_id": "P-04-ADV-001",
+      "rule_id": "P-04",
+      "actor_role": "support",
+      "preconditions": {
+        "order_id": 1004
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "support"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1004"
+        },
+        {
+          "action": "fill",
+          "testid": "discount-percent",
+          "value": "40"
+        },
+        {
+          "action": "click",
+          "testid": "discount-submit"
+        }
+      ],
+      "expected_outcome": "blocked",
+      "invariant_type": "max_discount_pct"
+    },
+    {
+      "test_id": "P-04-BND-001",
+      "rule_id": "P-04",
+      "actor_role": "support",
+      "preconditions": {
+        "order_id": 1004
+      },
+      "steps": [
+        {
+          "action": "login",
+          "role": "support"
+        },
+        {
+          "action": "goto",
+          "path": "/orders/1004"
+        },
+        {
+          "action": "fill",
+          "testid": "discount-percent",
+          "value": "30"
+        },
+        {
+          "action": "click",
+          "testid": "discount-submit"
+        }
+      ],
+      "expected_outcome": "allowed",
+      "invariant_type": "max_discount_pct"
     }
   ]
 }

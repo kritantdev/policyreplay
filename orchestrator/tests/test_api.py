@@ -13,6 +13,11 @@ from orchestrator.main import create_api  # noqa: E402
 
 GOLD_RULES = (ROOT / "orchestrator/golden/rules.json").read_text()
 GOLD_SC = (ROOT / "orchestrator/golden/scenarios.json").read_text()
+N_RULES = len(json.loads(GOLD_RULES)["rules"])
+N_UNSUPPORTED = len(json.loads(GOLD_RULES)["unsupported_clauses"])
+SCENARIOS = json.loads(GOLD_SC)["scenarios"]
+N_SCENARIOS = len(SCENARIOS)
+N_BLOCKED = sum(x["expected_outcome"] == "blocked" for x in SCENARIOS)     # planted violations expected
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
 
 
@@ -28,7 +33,7 @@ def fake_runner(rule, sc, profile, out, on_event):
     (out / "verdict.json").write_text("{}")
     (out / "pre.db").write_bytes(b"secret-db")
     on_event({"type": "stage", "text": f"fake run on {profile}"})
-    bad = profile == "buggy" and sc["test_id"] != "P-01-BND-001"
+    bad = profile == "buggy" and sc["expected_outcome"] == "blocked"
     return {"verdict": "VIOLATION" if bad else "PASS", "reasons": ["fake"], "checks": {}, "observed": {},
             "artifact_sha256": {"pre.db": "cd" * 32}}
 
@@ -65,7 +70,7 @@ def approved_run(c):
 def test_analyze_returns_labeled_unapproved_scenarios(api):
     a = analyze(api)
     assert a["source"] == {"rules": "replayed model output", "scenarios": "replayed model output"}
-    assert len(a["rules"]) == 3 and len(a["scenarios"]) == 5 and len(a["unsupported"]) == 2
+    assert (len(a["rules"]), len(a["scenarios"]), len(a["unsupported"])) == (N_RULES, N_SCENARIOS, N_UNSUPPORTED)
     assert not any(s["approved"] for s in a["scenarios"])
 
 
@@ -84,8 +89,8 @@ def test_approve_rejects_unknown_ids(api):
 def test_full_run_summary_and_zero_false_positives(api):
     a, run_id = approved_run(api)
     s = wait_done(api, run_id)
-    assert s["status"] == "finished" and s["progress"] == {"done": 10, "total": 10}
-    assert s["summary"]["planted_violations_detected"] == 4          # 5 scenarios minus the boundary
+    assert s["status"] == "finished" and s["progress"] == {"done": 2 * N_SCENARIOS, "total": 2 * N_SCENARIOS}
+    assert s["summary"]["planted_violations_detected"] == N_BLOCKED   # one per blocked-outcome scenario
     assert s["summary"]["false_positives_on_correct_build"] == 0
     assert s["summary"]["inconclusive"] == 0
 
@@ -194,3 +199,31 @@ def test_runner_crash_becomes_inconclusive_not_a_pass(tmp_path):
     s = wait_done(c, run_id)
     assert set(s["verdicts"].values()) == {"INCONCLUSIVE"}
     assert "shadow" not in json.dumps(c.get(f"/api/runs/{run_id}/report").json())   # no internals leaked
+
+
+def test_unsupported_clause_is_returned_to_the_ui_from_a_stubbed_model(tmp_path):
+    """The sample policy no longer has an unsupported clause; keep that path covered with a stub."""
+    rules = json.loads(GOLD_RULES)
+    rules["rules"] = [r for r in rules["rules"] if r["rule_id"] != "P-04"]
+    rules["unsupported_clauses"] = ["Discounts cannot exceed 30%."]
+    sc = json.loads(GOLD_SC)
+    sc["scenarios"] = [x for x in sc["scenarios"] if x["rule_id"] != "P-04"]
+
+    def model(messages, name):
+        return json.dumps(rules if messages[0]["content"].startswith("You extract") else sc)
+    c = TestClient(create_api(runs_dir=tmp_path, runner=fake_runner, transport=model))
+    a = c.post("/api/analyze", json={}).json()
+    assert a["source"] == {"rules": "model", "scenarios": "model"}
+    assert a["unsupported"] == ["Discounts cannot exceed 30%."]
+    assert len(a["rules"]) == N_RULES - 1 and len(a["scenarios"]) == N_SCENARIOS - 2
+
+
+def test_five_policy_headline_numbers(api):
+    """Explicit numbers from the plan (the other tests compute them from the data)."""
+    a, run_id = approved_run(api)
+    assert (len(a["rules"]), len(a["scenarios"]), len(a["unsupported"])) == (5, 9, 0)
+    s = wait_done(api, run_id)
+    assert s["progress"] == {"done": 18, "total": 18}
+    assert s["summary"] == {"cases": 18, "planted_violations_detected": 5,
+                            "false_positives_on_correct_build": 0, "inconclusive": 0,
+                            "cleanup_confirmed": None}

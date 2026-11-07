@@ -7,6 +7,14 @@
 <form method="post" action="/orders/{{ order.id }}/refund">
 <input data-testid="refund-amount" name="amount">
 <button data-testid="refund-submit" type="submit">Issue refund</button></form>
+<h2>Discount</h2>
+<p data-testid="order-discount">{{ order.discount_pct }}</p>
+<form method="post" action="/orders/{{ order.id }}/discount">
+<input data-testid="discount-percent" name="percent">
+<button data-testid="discount-submit" type="submit">Apply discount</button></form>
+<h2>Cancel</h2>
+<form method="post" action="/orders/{{ order.id }}/cancel">
+<button data-testid="cancel-submit" type="submit">Cancel order</button></form>
 <h2>Approvals</h2>
 {% for a in approvals %}<p data-testid="approval-row">{{ a.amount }} INR: {{ a.status }}</p>{% endfor %}
 <form method="post" action="/orders/{{ order.id }}/approval-request">

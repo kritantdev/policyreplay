@@ -33,6 +33,12 @@ CASES = [
     case("P-02", "buggy_p02", "buggy", "VIOLATION", actor="support", target=1, new_role="admin"),
     case("P-02", "correct_p02", "correct", "PASS", actor="support", target=1, new_role="admin"),
     case("P-02", "admin_ctl_p02", "correct", "PASS", actor="admin", target=4, new_role="manager"),
+    case("P-03", "buggy_p03", "buggy", "VIOLATION", order_id=1003),
+    case("P-03", "correct_p03", "correct", "PASS", order_id=1003),
+    case("P-03", "ctl_p03", "correct", "PASS", order_id=1004),
+    case("P-04", "buggy_p04", "buggy", "VIOLATION", percent=40),
+    case("P-04", "correct_p04", "correct", "PASS", percent=40),
+    case("P-04", "bnd_p04", "correct", "PASS", percent=30),
 ]
 
 

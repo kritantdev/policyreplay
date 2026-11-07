@@ -9,6 +9,13 @@ form to everyone; only the server check is missing). Every attempt is recorded i
 with the actor's role AT THE TIME (a self-promotion would otherwise hide the actor).
 P-05 planted bug (buggy only): GET /orders/{id} skips the ownership check (direct-URL access).
 Every order page view is recorded in order_views with the HTTP status actually returned.
+P-03 planted bug (buggy only): POST /orders/{id}/cancel skips the shipped/delivered status check.
+Correct build refuses with HTTP 409. Every attempt is recorded in order_status_changes with the
+order's status AT THE TIME of the attempt and whether the change was applied.
+P-04 planted bug (buggy only): POST /orders/{id}/discount has no maximum check. Correct build refuses
+percent > 30 with HTTP 422 (30 is allowed, 31 is not). Staff only (customers get 403 in both builds);
+input must be an integer 0..100 or HTTP 400 in both builds. Every attempt that reaches the rule is
+recorded in discount_changes with whether it was applied; invalid input and forbidden actors leave no row.
 """
 import os
 import sqlite3
@@ -19,11 +26,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 THRESHOLD = 10000
+MAX_DISCOUNT = 30
 BASE = Path(__file__).parent
 
 SCHEMA = """
 CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT UNIQUE, role TEXT);
-CREATE TABLE orders(id INTEGER PRIMARY KEY, customer_id INTEGER, total INTEGER, status TEXT);
+CREATE TABLE orders(id INTEGER PRIMARY KEY, customer_id INTEGER, total INTEGER, status TEXT,
+                    discount_pct INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE refunds(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
                      issued_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE approvals(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, amount INTEGER,
@@ -33,11 +42,19 @@ CREATE TABLE role_changes(id INTEGER PRIMARY KEY AUTOINCREMENT, target_user_id I
                          applied INTEGER, changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE order_views(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, order_id INTEGER,
                          status INTEGER, viewed_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE order_status_changes(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER,
+                         old_status TEXT, new_status TEXT, changed_by INTEGER, actor_role TEXT,
+                         applied INTEGER, changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE discount_changes(id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER,
+                         old_pct INTEGER, new_pct INTEGER, changed_by INTEGER, actor_role TEXT,
+                         applied INTEGER, changed_at TEXT DEFAULT CURRENT_TIMESTAMP);
 """
 ROLES = ["support", "manager", "admin", "customer"]
 SEED_USERS = [(1, "support1", "support"), (2, "manager1", "manager"), (3, "admin1", "admin"),
               (4, "alice", "customer"), (5, "bob", "customer")]
-SEED_ORDERS = [(1001, 4, 20000, "delivered"), (1002, 5, 8000, "delivered")]
+SEED_ORDERS = [(1001, 4, 20000, "delivered"), (1002, 5, 8000, "delivered"),
+               (1003, 4, 5000, "shipped"), (1004, 4, 3000, "processing")]
+NON_CANCELLABLE = ("shipped", "delivered")
 
 
 def create_app(profile=None, db_path=None):
@@ -50,7 +67,7 @@ def create_app(profile=None, db_path=None):
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)
     con.executemany("INSERT INTO users VALUES(?,?,?)", SEED_USERS)
-    con.executemany("INSERT INTO orders VALUES(?,?,?,?)", SEED_ORDERS)
+    con.executemany("INSERT INTO orders(id, customer_id, total, status) VALUES(?,?,?,?)", SEED_ORDERS)
     con.commit()
 
     app = FastAPI(title="Target Shop")
@@ -134,6 +151,57 @@ def create_app(profile=None, db_path=None):
                     (order_id, amount, u["id"]))
         con.commit()
         return order_page(request, u, order_id, f"Refund of {amount} issued", "success")
+
+    @app.post("/orders/{order_id}/cancel", response_class=HTMLResponse)
+    def cancel_order(request: Request, order_id: int):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        o = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not o:
+            return HTMLResponse('<p data-testid="error">Not found</p>', status_code=404)
+        # A customer may cancel only their own order (both builds); staff may cancel any.
+        if u["role"] == "customer" and o["customer_id"] != u["id"]:
+            return order_page(request, u, order_id, "Not allowed", "error", 403)
+        # P-03 planted bug: the buggy build skips the shipped/delivered status check.
+        allowed = not (profile == "correct" and o["status"] in NON_CANCELLABLE)
+        if o["status"] == "cancelled":
+            return order_page(request, u, order_id, "Order is already cancelled", "error", 409)
+        con.execute("INSERT INTO order_status_changes(order_id, old_status, new_status, changed_by, "
+                    "actor_role, applied) VALUES(?,?,?,?,?,?)",
+                    (order_id, o["status"], "cancelled", u["id"], u["role"], 1 if allowed else 0))
+        if allowed:
+            con.execute("UPDATE orders SET status='cancelled' WHERE id=?", (order_id,))
+            con.commit()
+            return order_page(request, u, order_id, "Order cancelled", "success")
+        con.commit()
+        return order_page(request, u, order_id, "Shipped orders cannot be cancelled", "error", 409)
+
+    @app.post("/orders/{order_id}/discount", response_class=HTMLResponse)
+    def discount(request: Request, order_id: int, percent: str = Form("")):
+        u = me(request)
+        if not u:
+            return RedirectResponse("/login", status_code=303)
+        o = con.execute("SELECT * FROM orders WHERE id=?", (order_id,)).fetchone()
+        if not o:
+            return HTMLResponse('<p data-testid="error">Not found</p>', status_code=404)
+        if u["role"] not in ("support", "manager", "admin"):
+            return order_page(request, u, order_id, "Not allowed", "error", 403)
+        if not (percent.isascii() and percent.isdigit() and len(percent) <= 3 and 0 <= int(percent) <= 100):
+            return order_page(request, u, order_id, "Discount must be a whole number from 0 to 100",
+                              "error", 400)
+        pct = int(percent)
+        # P-04 planted bug: the buggy build has no maximum-discount check.
+        allowed = not (profile == "correct" and pct > MAX_DISCOUNT)
+        con.execute("INSERT INTO discount_changes(order_id, old_pct, new_pct, changed_by, actor_role, "
+                    "applied) VALUES(?,?,?,?,?,?)",
+                    (order_id, o["discount_pct"], pct, u["id"], u["role"], 1 if allowed else 0))
+        if allowed:
+            con.execute("UPDATE orders SET discount_pct=? WHERE id=?", (pct, order_id))
+            con.commit()
+            return order_page(request, u, order_id, f"Discount of {pct}% applied", "success")
+        con.commit()
+        return order_page(request, u, order_id, "Discounts cannot exceed 30%", "error", 422)
 
     @app.post("/orders/{order_id}/approval-request", response_class=HTMLResponse)
     def approval_request(request: Request, order_id: int, amount: int = Form(...)):

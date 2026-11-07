@@ -169,6 +169,11 @@ def run_scenario(rule, sc, profile, out, on_event=None):
     net, app, wk = f"pr-net-{rid}", f"app-{rid}", f"worker-{rid}"
     out = Path(out)
     shutil.rmtree(out, ignore_errors=True)
+    if out.exists():
+        # The worker writes as uid 10001, so the host user cannot always delete a previous run's folder.
+        # Never crash on that: keep the old evidence untouched and write this run to a fresh folder.
+        out = out.with_name(f"{out.name}-{rid}")
+        emit("stage", text=f"previous run folder could not be deleted; writing to {out.name}")
     ev = out / "evidence"
     ev.mkdir(parents=True)
     try:
@@ -177,7 +182,7 @@ def run_scenario(rule, sc, profile, out, on_event=None):
         pass
     before = inventory()
     (out / "inventory_before.json").write_text(json.dumps(before, indent=2))
-    summary = {"run_id": rid, "containment": {}, "error": None, "worker_exit": None}
+    summary = {"run_id": rid, "containment": {}, "error": None, "worker_exit": None, "evidence_dir": str(out)}
     try:
         docker(["network", "create", "--internal", net])
         r = docker(["run", "-d", "--name", app, "--network", net, *harden("256m", "128", "0.5"),

@@ -5,7 +5,7 @@ from pathlib import Path
 LIMITATIONS = [
     "This tests the listed scenarios only. A PASS means the tested attempt was blocked; it is not a "
     "compliance certification of the application.",
-    "Evidence for P-01, P-02 and P-05 includes audit rows maintained by the application under test; "
+    "Evidence for P-01, P-02, P-03, P-04 and P-05 includes audit rows maintained by the application under test; "
     "each verdict also requires the browser-observed HTTP status to agree with them.",
     "Chromium's own sandbox is disabled (--no-sandbox); the container is the isolation boundary. Docker is "
     "not a complete boundary against kernel-level exploits: the threat model is an untrusted target app "

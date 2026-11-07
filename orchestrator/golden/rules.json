@@ -25,10 +25,25 @@
       "action": "modify_user_role",
       "params": {},
       "invariant_type": "role_change_admin_only"
+    },
+    {
+      "rule_id": "P-03",
+      "source_clause": "Shipped orders cannot be cancelled.",
+      "actor": "customer",
+      "action": "cancel_order",
+      "params": {},
+      "invariant_type": "no_cancel_after_ship"
+    },
+    {
+      "rule_id": "P-04",
+      "source_clause": "Discounts cannot exceed 30%.",
+      "actor": "support",
+      "action": "apply_discount",
+      "params": {
+        "max_percent": 30
+      },
+      "invariant_type": "max_discount_pct"
     }
   ],
-  "unsupported_clauses": [
-    "Shipped orders cannot be cancelled.",
-    "Discounts cannot exceed 30%."
-  ]
+  "unsupported_clauses": []
 }

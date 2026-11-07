@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 640" font-family="system-ui,Segoe UI,Roboto,sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5aa2ff"/></marker></defs>
+<rect width="1100" height="640" fill="#0e1319"/>
+<text x="30" y="40" fill="#e8eef5" font-size="22" font-weight="700">PolicyReplay: architecture</text>
+<text x="30" y="62" fill="#93a1b3" font-size="13">The LLM interprets and plans. Code proves. The sandbox never judges itself.</text>
+
+<rect x="30" y="85" width="170" height="70" rx="10" fill="#161d26" stroke="#2a3646"/>
+<text x="115" y="115" fill="#e8eef5" font-size="14" text-anchor="middle" font-weight="600">Judge / user</text>
+<text x="115" y="136" fill="#93a1b3" font-size="12" text-anchor="middle">browser or phone</text>
+
+<rect x="250" y="70" width="820" height="545" rx="14" fill="none" stroke="#43d29b" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="268" y="96" fill="#43d29b" font-size="13" font-weight="700">VULTR CLOUD COMPUTE VM (trusted host, firewall: 22, 80, 443)</text>
+
+<rect x="275" y="115" width="150" height="60" rx="8" fill="#161d26" stroke="#2a3646"/>
+<text x="350" y="141" fill="#e8eef5" font-size="14" text-anchor="middle" font-weight="600">Caddy</text>
+<text x="350" y="160" fill="#93a1b3" font-size="12" text-anchor="middle">automatic HTTPS</text>
+
+<rect x="475" y="115" width="260" height="120" rx="8" fill="#161d26" stroke="#5aa2ff" stroke-width="2"/>
+<text x="605" y="141" fill="#e8eef5" font-size="14" text-anchor="middle" font-weight="600">FastAPI orchestrator + dashboard</text>
+<text x="605" y="162" fill="#93a1b3" font-size="12" text-anchor="middle">holds the inference key</text>
+<text x="605" y="180" fill="#93a1b3" font-size="12" text-anchor="middle">approval gate · rate limits · budget</text>
+<text x="605" y="198" fill="#93a1b3" font-size="12" text-anchor="middle">one run at a time · SSE live events</text>
+<text x="605" y="220" fill="#f6bd4b" font-size="12" text-anchor="middle">never runs inside a sandbox</text>
+
+<rect x="805" y="95" width="245" height="100" rx="10" fill="#161d26" stroke="#5aa2ff"/>
+<text x="927" y="122" fill="#e8eef5" font-size="14" text-anchor="middle" font-weight="600">Vultr Serverless Inference</text>
+<text x="927" y="143" fill="#93a1b3" font-size="12" text-anchor="middle">OpenAI-compatible, temperature 0</text>
+<text x="927" y="162" fill="#93a1b3" font-size="12" text-anchor="middle">1) extract rules  2) generate scenarios</text>
+<text x="927" y="180" fill="#93a1b3" font-size="12" text-anchor="middle">output validated by code, retried once</text>
+
+<rect x="275" y="270" width="520" height="215" rx="12" fill="#1a1416" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="293" y="295" fill="#ff6b6b" font-size="13" font-weight="700">SANDBOX per run: internal Docker network, no egress</text>
+<rect x="295" y="315" width="225" height="115" rx="8" fill="#161d26" stroke="#2a3646"/>
+<text x="407" y="340" fill="#e8eef5" font-size="14" text-anchor="middle" font-weight="600">Target app container</text>
+<text x="407" y="361" fill="#93a1b3" font-size="12" text-anchor="middle">buggy or correct build (BUG_PROFILE)</text>
+<text x="407" y="379" fill="#93a1b3" font-size="12" text-anchor="middle">SQLite on tmpfs, synthetic data</text>
+<text x="407" y="397" fill="#93a1b3" font-size="12" text-anchor="middle">read-only root, user 10001</text>
+<rect x="550" y="315" width="225" height="115" rx="8" fill="#161d26" stroke="#2a3646"/>
+<text x="662" y="340" fill="#e8eef5" font-size="13" text-anchor="middle" font-weight="600">Playwright worker container</text>
+<text x="662" y="361" fill="#93a1b3" font-size="12" text-anchor="middle">executes the validated step plan</text>
+<text x="662" y="379" fill="#93a1b3" font-size="12" text-anchor="middle">trace, HTTP log, screenshots</text>
+<text x="662" y="397" fill="#93a1b3" font-size="12" text-anchor="middle">cap-drop ALL, no secrets inside</text>
+<path d="M550 372 L522 372" stroke="#5aa2ff" stroke-width="2" marker-end="url(#a)"/>
+<text x="535" y="460" fill="#93a1b3" font-size="11.5" text-anchor="middle">flags: --read-only  --cap-drop ALL  --no-new-privileges  --pids-limit  --memory  --cpus</text>
+
+<rect x="830" y="270" width="220" height="215" rx="12" fill="#161d26" stroke="#43d29b" stroke-width="2"/>
+<text x="940" y="298" fill="#43d29b" font-size="13" text-anchor="middle" font-weight="700">HOST-SIDE VERIFIER</text>
+<text x="940" y="324" fill="#e8eef5" font-size="13" text-anchor="middle">deterministic Python</text>
+<text x="940" y="346" fill="#93a1b3" font-size="12" text-anchor="middle">pre/post DB snapshots</text>
+<text x="940" y="364" fill="#93a1b3" font-size="12" text-anchor="middle">+ observed HTTP status</text>
+<text x="940" y="392" fill="#93a1b3" font-size="12" text-anchor="middle">fixed queries by invariant_type</text>
+<text x="940" y="418" fill="#e8eef5" font-size="11.5" text-anchor="middle" font-weight="600">VIOLATION · PASS · INCONCLUSIVE</text>
+<text x="940" y="442" fill="#f6bd4b" font-size="12" text-anchor="middle">the LLM supplies no query or parameter</text>
+
+<path d="M200 120 L275 145" stroke="#5aa2ff" stroke-width="2" marker-end="url(#a)"/>
+<path d="M425 145 L475 145" stroke="#5aa2ff" stroke-width="2" marker-end="url(#a)"/>
+<path d="M735 150 L805 150" stroke="#5aa2ff" stroke-width="2" marker-end="url(#a)"/>
+<path d="M605 235 L605 270" stroke="#5aa2ff" stroke-width="2" marker-end="url(#a)"/>
+<path d="M795 380 L830 380" stroke="#43d29b" stroke-width="2" marker-end="url(#a)"/>
+<text x="812" y="372" fill="#93a1b3" font-size="10.5" text-anchor="middle">snapshots</text>
+<path d="M940 270 C940 240 860 235 735 215" fill="none" stroke="#43d29b" stroke-width="2" marker-end="url(#a)"/>
+<text x="880" y="228" fill="#93a1b3" font-size="11" text-anchor="middle">verdict</text>
+
+<rect x="275" y="510" width="775" height="85" rx="10" fill="#161d26" stroke="#2a3646"/>
+<text x="293" y="536" fill="#e8eef5" font-size="13" font-weight="700">Per run lifecycle</text>
+<text x="293" y="560" fill="#93a1b3" font-size="12.5">1 create internal network  →  2 start app + worker  →  3 run plan, copy out snapshots + evidence  →  4 verify on the host</text>
+<text x="293" y="580" fill="#93a1b3" font-size="12.5">5 destroy both containers and the network  →  6 log container and network inventory before and after  →  7 evidence report</text>
+</svg>

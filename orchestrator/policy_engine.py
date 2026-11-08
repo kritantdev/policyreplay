@@ -231,6 +231,14 @@ def _parse_scenarios(obj, rules):
         out.append(check_scenario(sc, by_id[sc.rule_id]))
     if len({s.test_id for s in out}) != len(out):
         raise ValueError("duplicate test_id")
+    seen, unique = set(), []
+    for s in out:        # a copy under another test_id adds cost, not coverage: keep the first
+        key = (s.rule_id, s.actor_role, json.dumps(s.preconditions, sort_keys=True),
+               json.dumps(s.steps, sort_keys=True))
+        if key not in seen:
+            seen.add(key)
+            unique.append(s)
+    out = unique
     missing = set(by_id) - {s.rule_id for s in out}
     if missing:
         raise ValueError(f"no scenario for rules: {sorted(missing)}")

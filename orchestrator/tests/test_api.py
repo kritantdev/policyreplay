@@ -224,6 +224,6 @@ def test_five_policy_headline_numbers(api):
     assert (len(a["rules"]), len(a["scenarios"]), len(a["unsupported"])) == (5, 9, 0)
     s = wait_done(api, run_id)
     assert s["progress"] == {"done": 18, "total": 18}
-    assert s["summary"] == {"cases": 18, "policies_tested": 5, "planted_violations_detected": 5,
-                            "violating_scenarios": 5, "false_positives_on_correct_build": 0,
-                            "inconclusive": 0, "cleanup_confirmed": None}
+    assert s["summary"] == {"cases": 18, "planted_violations_detected": 5,
+                            "false_positives_on_correct_build": 0, "inconclusive": 0,
+                            "cleanup_confirmed": None}

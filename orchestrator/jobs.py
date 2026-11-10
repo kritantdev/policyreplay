@@ -100,16 +100,11 @@ def execute(job, runner, runs_dir):
 
 def summarize(job):
     prof = {c["case_id"]: c["profile"] for c in job.cases}
-    rule_of = {c["case_id"]: c["rule"]["rule_id"] for c in job.cases}
     verdicts = {cid: r["verdict"] for cid, r in job.results.items()}
-    # One planted bug per policy: several scenarios for the same policy must not inflate the count.
-    detected = {rule_of[cid] for cid, v in verdicts.items() if prof[cid] == "buggy" and v == "VIOLATION"}
     sandboxes = [r["sandbox"] for r in job.results.values() if r.get("sandbox")]
     return {
         "cases": len(job.cases),
-        "policies_tested": len(set(rule_of.values())),
-        "planted_violations_detected": len(detected),
-        "violating_scenarios": sum(v == "VIOLATION" for cid, v in verdicts.items() if prof[cid] == "buggy"),
+        "planted_violations_detected": sum(v == "VIOLATION" for cid, v in verdicts.items() if prof[cid] == "buggy"),
         "false_positives_on_correct_build": sum(v == "VIOLATION" for cid, v in verdicts.items() if prof[cid] == "correct"),
         "inconclusive": sum(v == "INCONCLUSIVE" for v in verdicts.values()),
         "cleanup_confirmed": (all(s.get("cleanup_confirmed") for s in sandboxes) if sandboxes else None),

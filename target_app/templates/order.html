@@ -1,23 +1,29 @@
 {% extends "base.html" %}{% block body %}
 <h1>Order #{{ order.id }}</h1>
-<p data-testid="order-total">{{ order.total }}</p><p data-testid="order-status">{{ order.status }}</p>
+<div class="summary">
+<div class="kv"><span class="k">Total (INR)</span><p data-testid="order-total">{{ order.total }}</p></div>
+<div class="kv"><span class="k">Status</span><p data-testid="order-status">{{ order.status }}</p></div>
+</div>
 {% if flash %}<p data-testid="{{ 'flash-success' if kind == 'success' else 'error' }}">{{ flash }}</p>{% endif %}
-<h2>Refunds</h2>
-{% for r in refunds %}<p data-testid="refund-row">{{ r.amount }} INR</p>{% endfor %}
-<form method="post" action="/orders/{{ order.id }}/refund">
-<input data-testid="refund-amount" name="amount">
-<button data-testid="refund-submit" type="submit">Issue refund</button></form>
-<h2>Discount</h2>
-<p data-testid="order-discount">{{ order.discount_pct }}</p>
-<form method="post" action="/orders/{{ order.id }}/discount">
-<input data-testid="discount-percent" name="percent">
-<button data-testid="discount-submit" type="submit">Apply discount</button></form>
-<h2>Cancel</h2>
+<section class="card"><h2>Refunds</h2>
+<div class="rows">{% for r in refunds %}<p data-testid="refund-row">{{ r.amount }} INR</p>{% else %}<p class="empty">No refunds issued.</p>{% endfor %}</div>
+<form method="post" action="/orders/{{ order.id }}/refund" class="inline">
+<label for="refund-amount">Amount (INR)</label>
+<input id="refund-amount" data-testid="refund-amount" name="amount" inputmode="numeric">
+<button data-testid="refund-submit" type="submit">Issue refund</button></form></section>
+<section class="card"><h2>Discount</h2>
+<div class="kv row"><span class="k">Current discount (%)</span><p data-testid="order-discount">{{ order.discount_pct }}</p></div>
+<form method="post" action="/orders/{{ order.id }}/discount" class="inline">
+<label for="discount-percent">Percent</label>
+<input id="discount-percent" data-testid="discount-percent" name="percent" inputmode="numeric">
+<button data-testid="discount-submit" type="submit">Apply discount</button></form></section>
+<section class="card"><h2>Cancel</h2>
 <form method="post" action="/orders/{{ order.id }}/cancel">
-<button data-testid="cancel-submit" type="submit">Cancel order</button></form>
-<h2>Approvals</h2>
-{% for a in approvals %}<p data-testid="approval-row">{{ a.amount }} INR: {{ a.status }}</p>{% endfor %}
-<form method="post" action="/orders/{{ order.id }}/approval-request">
-<input data-testid="approval-amount" name="amount">
-<button data-testid="approval-request-submit" type="submit">Request approval</button></form>
+<button class="danger" data-testid="cancel-submit" type="submit">Cancel order</button></form></section>
+<section class="card"><h2>Approvals</h2>
+<div class="rows">{% for a in approvals %}<p data-testid="approval-row">{{ a.amount }} INR: {{ a.status }}</p>{% else %}<p class="empty">No approval requests.</p>{% endfor %}</div>
+<form method="post" action="/orders/{{ order.id }}/approval-request" class="inline">
+<label for="approval-amount">Amount (INR)</label>
+<input id="approval-amount" data-testid="approval-amount" name="amount" inputmode="numeric">
+<button data-testid="approval-request-submit" type="submit">Request approval</button></form></section>
 {% endblock %}

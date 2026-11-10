@@ -1,4 +1,5 @@
 {% extends "base.html" %}{% block body %}<h1>Orders</h1>
-<table>{% for o in orders %}<tr data-testid="order-row-{{ o.id }}">
+<table><thead><tr><th>Order</th><th>Total</th><th>Status</th></tr></thead><tbody>
+{% for o in orders %}<tr data-testid="order-row-{{ o.id }}">
 <td><a data-testid="order-link-{{ o.id }}" href="/orders/{{ o.id }}">#{{ o.id }}</a></td>
-<td>{{ o.total }} INR</td><td>{{ o.status }}</td></tr>{% endfor %}</table>{% endblock %}
+<td>{{ o.total }} INR</td><td>{{ o.status }}</td></tr>{% else %}<tr><td colspan="3" class="empty">No orders to show.</td></tr>{% endfor %}</tbody></table>{% endblock %}

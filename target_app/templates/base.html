@@ -1,5 +1,60 @@
-<!doctype html><html><head><meta charset="utf-8"><title>Target Shop</title></head><body>
-<header>Target Shop {% if user %}| <span data-testid="current-user">{{ user.username }} ({{ user.role }})</span>
-| <a data-testid="nav-orders" href="/orders">Orders</a>
-{% if user.role == 'manager' %}| <a data-testid="nav-approvals" href="/approvals">Approvals</a>{% endif %}{% if user.role != 'customer' %}| <a data-testid="nav-users" href="/users">Users</a>{% endif %}{% endif %}</header><hr>
-{% block body %}{% endblock %}</body></html>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Target Shop</title>
+<style>
+:root{--bg:#f4f5f7;--surface:#fff;--surface-2:#f8f9fb;--line:#dde1e7;--line-strong:#c3c9d2;--text:#1a2230;--muted:#5a6575;
+--accent:#1d4f91;--accent-hover:#173f74;--bar:#1f2a3a;--red:#b42318;--red-bg:#fef3f2;--red-line:#f3c5c0;
+--green:#0b6b45;--green-bg:#ecf8f1;--green-line:#b4dfc8;
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--sans)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bar{background:var(--bar);color:#fff}
+.bar-in{max-width:960px;margin:0 auto;padding:0 24px;height:52px;display:flex;align-items:center;gap:28px}
+.brand{font-weight:600;font-size:15px}
+.bar nav{display:flex;gap:20px}
+.bar a{color:#c9d1dc;text-decoration:none;padding:4px 0}
+.bar a:hover{color:#fff}
+.who{margin-left:auto;font-size:13px;color:#c9d1dc}
+main{max-width:960px;margin:0 auto;padding:28px 24px 56px}
+h1{margin:0 0 16px;font-size:20px;font-weight:600}
+h2{margin:0 0 12px;font-size:15px;font-weight:600}
+a{color:var(--accent)}
+p{margin:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 20px;margin-bottom:16px}
+.summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.summary .kv{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:160px}
+.k{display:block;font-size:12.5px;color:var(--muted)}
+.kv p{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.kv.row{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.kv.row p{font-size:14px}
+.rows{margin-bottom:12px}
+.rows p{padding:7px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);padding:7px 0}
+.rows p.empty{border-bottom:0;padding-top:0}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:10px 16px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:600}
+tbody tr:last-child td{border-bottom:0}
+form{margin:0}
+.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stack{display:flex;flex-direction:column;gap:8px}
+label{font-size:13px;color:var(--muted)}
+input,select{height:34px;border:1px solid var(--line-strong);border-radius:6px;padding:0 10px;font:inherit;color:var(--text);background:var(--surface)}
+input:focus,select:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px #e8f0fa}
+button{height:34px;border:1px solid var(--accent);border-radius:6px;padding:0 14px;font:inherit;font-weight:500;color:#fff;background:var(--accent);cursor:pointer}
+button:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+button.danger{background:var(--surface);color:var(--red);border-color:#e3a39d}
+button.danger:hover{background:var(--red-bg);border-color:var(--red)}
+[data-testid="error"],[data-testid="flash-success"]{padding:10px 14px;border-radius:6px;border:1px solid;margin-bottom:16px}
+[data-testid="error"]{color:var(--red);background:var(--red-bg);border-color:var(--red-line)}
+[data-testid="flash-success"]{color:var(--green);background:var(--green-bg);border-color:var(--green-line)}
+.approval{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:8px}
+.auth{max-width:340px;margin:48px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:24px}
+.auth h1{margin-bottom:12px}
+.auth input{width:100%}
+@media(max-width:640px){.bar-in{gap:16px;padding:0 14px}main{padding:20px 14px 40px}.who{display:none}th,td{padding:9px 10px}}
+</style></head><body>
+<header class="bar"><div class="bar-in"><span class="brand">Target Shop</span>
+{% if user %}<nav><a data-testid="nav-orders" href="/orders">Orders</a>{% if user.role == 'manager' %}<a data-testid="nav-approvals" href="/approvals">Approvals</a>{% endif %}{% if user.role != 'customer' %}<a data-testid="nav-users" href="/users">Users</a>{% endif %}</nav>
+<span class="who" data-testid="current-user">{{ user.username }} ({{ user.role }})</span>{% endif %}</div></header>
+<main>{% block body %}{% endblock %}</main></body></html>

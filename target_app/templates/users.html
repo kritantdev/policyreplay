@@ -1,7 +1,8 @@
 {% extends "base.html" %}{% block body %}<h1>Users</h1>
 {% if flash %}<p data-testid="{{ 'flash-success' if kind == 'success' else 'error' }}">{{ flash }}</p>{% endif %}
-<table>{% for r in users %}<tr data-testid="user-row-{{ r.id }}"><td>{{ r.username }}</td>
+<table><thead><tr><th>User</th><th>Role</th><th>Change role</th></tr></thead><tbody>
+{% for r in users %}<tr data-testid="user-row-{{ r.id }}"><td>{{ r.username }}</td>
 <td data-testid="user-role-{{ r.id }}">{{ r.role }}</td><td>
-<form method="post" action="/users/{{ r.id }}/role">
-<select data-testid="role-select-{{ r.id }}" name="role">{% for x in roles %}<option value="{{ x }}"{% if x == r.role %} selected{% endif %}>{{ x }}</option>{% endfor %}</select>
-<button data-testid="role-submit-{{ r.id }}" type="submit">Change role</button></form></td></tr>{% endfor %}</table>{% endblock %}
+<form method="post" action="/users/{{ r.id }}/role" class="inline">
+<select data-testid="role-select-{{ r.id }}" name="role" aria-label="New role for {{ r.username }}">{% for x in roles %}<option value="{{ x }}"{% if x == r.role %} selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+<button data-testid="role-submit-{{ r.id }}" type="submit">Change role</button></form></td></tr>{% endfor %}</tbody></table>{% endblock %}

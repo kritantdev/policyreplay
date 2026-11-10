@@ -3,100 +3,217 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PolicyReplay: Workflow Red Team</title>
+<title>PolicyReplay · Workflow policy testing</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f4e8c'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
-:root{--bg:#0e1319;--panel:#161d26;--panel2:#1b2430;--line:#2a3646;--text:#e8eef5;--muted:#93a1b3;
---accent:#5aa2ff;--red:#ff6b6b;--green:#43d29b;--amber:#f6bd4b;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+:root{color-scheme:light;
+  --bg:#f4f5f7;--surface:#fff;--surface-2:#f8f9fb;--line:#dcdfe5;--line-2:#c8ccd4;
+  --text:#1b2330;--muted:#5a6475;--accent:#1f4e8c;--accent-2:#173c6d;
+  --ok:#18794e;--ok-bg:#e7f4ed;--ok-line:#b9dcc9;
+  --bad:#b3261e;--bad-bg:#fbeceb;--bad-line:#efc5c2;
+  --warn:#8a5a00;--warn-bg:#fcf3dc;--warn-line:#ecd69a;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:18px 24px;border-bottom:1px solid var(--line)}
-h1{margin:0;font-size:22px}.tag{margin:2px 0 0;color:var(--muted);font-size:13px}
-h2{margin:0 0 12px;font-size:17px}h3{margin:16px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-nav.tabs{display:flex;gap:6px;padding:12px 24px 0;border-bottom:1px solid var(--line);overflow-x:auto}
-nav.tabs button{background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);padding:10px 14px;font:inherit;cursor:pointer;white-space:nowrap}
-nav.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
-main{max-width:1100px;margin:0 auto;padding:20px 24px 60px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
-textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px;font:13px/1.5 var(--mono);resize:vertical}
+html{-webkit-text-size-adjust:100%}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--sans)}
+h1,h2,h3,h4,p{margin:0}
+h2{font-size:15px;font-weight:600}
+h4{font-size:12.5px;font-weight:600;color:var(--muted);margin:16px 0 6px}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}.small{font-size:12.5px}.mono{font-family:var(--mono);font-size:12.5px}
+.err{color:var(--bad)}
+
+/* top bar and steps */
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border-bottom:1px solid var(--line);padding:12px 28px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand svg{flex:none}
+.brand .name{font-size:16px;font-weight:600;line-height:1.2}
+.brand .sub{font-size:12.5px;color:var(--muted);line-height:1.3}
+.status-chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;border:1px solid var(--line-2);border-radius:999px;padding:3px 11px;color:var(--muted);background:var(--surface)}
+.status-chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--line-2)}
+.status-chip.ok{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}.status-chip.ok::before{background:var(--ok)}
+.status-chip.warn{color:var(--warn);border-color:var(--warn-line);background:var(--warn-bg)}.status-chip.warn::before{background:var(--warn)}
+.status-chip.bad{color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)}.status-chip.bad::before{background:var(--bad)}
+nav.steps{display:flex;gap:4px;padding:0 28px;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto}
+nav.steps button{display:flex;align-items:center;gap:8px;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:11px 14px 10px;font:inherit;cursor:pointer;white-space:nowrap}
+nav.steps button .n{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);font-size:12px}
+nav.steps button[aria-selected="true"]{color:var(--text);font-weight:600;border-bottom-color:var(--accent)}
+nav.steps button[aria-selected="true"] .n{background:var(--accent);border-color:var(--accent);color:#fff}
+main{max-width:1080px;margin:0 auto;padding:22px 28px 64px}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;margin-bottom:16px}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 18px;border-bottom:1px solid var(--line)}
+.pb{padding:16px 18px}
+.lead{color:var(--muted);margin:0 0 10px}
+textarea{width:100%;background:var(--surface-2);color:var(--text);border:1px solid var(--line-2);border-radius:4px;padding:10px 12px;font:13px/1.55 var(--mono);resize:vertical}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-.btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 16px;font:inherit;cursor:pointer}
-.btn:hover:not(:disabled){border-color:var(--accent)}.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#04111f;font-weight:600}
-.muted{color:var(--muted)}.small{font-size:13px}.mono{font-family:var(--mono);font-size:12.5px}
-.chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;border:1px solid var(--line);color:var(--muted);vertical-align:middle}
-.chip.ok{color:var(--green);border-color:var(--green)}.chip.warn{color:var(--amber);border-color:var(--amber)}.chip.bad{color:var(--red);border-color:var(--red)}
-.badge{display:inline-block;padding:3px 10px;border-radius:6px;font-weight:700;font-size:12px;letter-spacing:.03em}
-.badge.VIOLATION{background:var(--red);color:#2a0606}.badge.PASS{background:var(--green);color:#04281b}
-.badge.INCONCLUSIVE{background:var(--amber);color:#2b1d02}.badge.PENDING{background:var(--line);color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
-.card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px}
-blockquote{margin:8px 0;padding:6px 12px;border-left:3px solid var(--accent);color:var(--text);background:var(--bg)}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top;font-size:13.5px}
-th{color:var(--muted);font-weight:600}
-.bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden}.bar>div{height:100%;width:0;background:var(--accent);transition:width .3s}
-.case{border:1px solid var(--line);border-radius:8px;margin:10px 0;background:var(--panel2)}
-.case>.hd{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;align-items:center}
-.case ul{list-style:none;margin:0;padding:0 12px 10px;font-size:13px}.case li{padding:1px 0;color:var(--muted)}
-.case li.ok{color:var(--text)}.case li.bad{color:var(--red)}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px}
-.tile{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px}.tile b{display:block;font-size:26px}
-.banner{border:1px solid var(--red);background:#2a1214;border-radius:10px;padding:16px;margin-bottom:16px}
-.banner .big{font-size:19px;font-weight:700;margin-bottom:6px}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media(max-width:760px){.pair{grid-template-columns:1fr}main{padding:14px}header.top{padding:14px}}
-details{margin-top:8px}summary{cursor:pointer;color:var(--accent);font-size:13px}
-pre{margin:6px 0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;overflow:auto;font:12px/1.45 var(--mono);white-space:pre-wrap;word-break:break-word}
-.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:8px}
-.shots a{display:block;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--bg);color:var(--muted);font-size:11px;text-decoration:none}
-.shots img{display:block;width:100%}.shots span{display:block;padding:3px 6px}
-.err{color:var(--red)}
+.btn{background:var(--surface);color:var(--text);border:1px solid var(--line-2);border-radius:4px;padding:7px 14px;font:inherit;font-weight:500;cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.primary:hover:not(:disabled){background:var(--accent-2);border-color:var(--accent-2);color:#fff}
+.btn.sm{padding:4px 10px;font-size:12.5px}
+.chip{display:inline-block;font-size:12px;line-height:1.5;padding:1px 9px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);background:var(--surface);white-space:nowrap}
+.chip.ok{color:var(--ok);border-color:var(--ok-line);background:var(--ok-bg)}
+.chip.warn{color:var(--warn);border-color:var(--warn-line);background:var(--warn-bg)}
+.chip.bad{color:var(--bad);border-color:var(--bad-line);background:var(--bad-bg)}
+.badge{display:inline-block;font-size:12px;font-weight:600;line-height:1.5;padding:1px 8px;border-radius:4px;border:1px solid;white-space:nowrap}
+.badge.VIOLATION{color:var(--bad);background:var(--bad-bg);border-color:var(--bad-line)}
+.badge.PASS{color:var(--ok);background:var(--ok-bg);border-color:var(--ok-line)}
+.badge.INCONCLUSIVE{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-line)}
+.badge.PENDING{color:var(--muted);background:var(--surface-2);border-color:var(--line)}
+
+/* tables */
+.tablewrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:600;text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td.num{width:36px;padding-right:0}
+.nw{white-space:nowrap}
+.tbl .grp td{background:var(--surface-2);font-weight:600}
+.tbl .grp .clause{font-weight:400;color:var(--muted)}
+.kv td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--muted);width:44%}
+.kv td:not(:first-child){font-size:13px}
+.unsup h4{margin-top:0}
+.unsup div{margin:4px 0}
+
+/* headline */
+.headline{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line-2);border-radius:6px;padding:14px 18px;margin-bottom:16px}
+.headline .t{font-size:18px;font-weight:600;line-height:1.35}
+.headline .s{color:var(--muted);margin-top:2px}
+.headline.ok{border-left-color:var(--ok)}.headline.warn{border-left-color:var(--warn)}
+.headline.bad{border-left-color:var(--bad)}.headline.run{border-left-color:var(--accent)}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin:-4px 0 16px}
+.bar>div{height:100%;width:0;background:var(--accent);transition:width .25s}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:16px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.tile .v{font-size:24px;font-weight:600;line-height:1.2}.tile .v span{font-size:14px;font-weight:400;color:var(--muted)}
+.tile .k{color:var(--muted);font-size:12.5px;margin-top:2px}
+
+/* finding */
+.banner{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--bad);border-radius:6px;padding:14px 18px;margin-bottom:16px}
+.banner .lbl{font-size:12px;font-weight:600;color:var(--bad)}
+.banner .big{font-size:17px;font-weight:600;margin:2px 0 8px}
+blockquote{margin:0;padding:6px 12px;border-left:3px solid var(--line-2);background:var(--surface-2);color:var(--text)}
+
+/* live cases */
+details.case{border:1px solid var(--line);border-radius:6px;background:var(--surface);margin:8px 0}
+details.case>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer}
+details.case>summary::-webkit-details-marker{display:none}
+.chev{flex:none;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;margin:0 3px 0 1px}
+details[open]>summary .chev{transform:rotate(45deg)}
+.tid{font-weight:600}
+.grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.log{list-style:none;margin:0;padding:8px 14px 12px 30px;border-top:1px solid var(--line);font:12.5px/1.65 var(--mono);color:var(--muted)}
+.log li.ok{color:var(--text)}.log li.bad{color:var(--bad)}
+.log:empty{display:none}
+
+/* results matrix and report */
+.cell{background:none;border:1px solid transparent;border-radius:4px;padding:1px;cursor:pointer;font:inherit}
+.cell:hover{border-color:var(--accent)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.build{border:1px solid var(--line);border-radius:6px;padding:12px;background:var(--surface-2);min-width:0}
+.build .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.build .reason{margin:8px 0 2px}
+.build details{margin-top:8px}.build summary{cursor:pointer;color:var(--accent);font-size:13px}
+pre{margin:6px 0;padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:4px;overflow:auto;font:12px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px}
+.shots a{display:block;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface);color:var(--muted);font-size:12px;text-decoration:none}
+.shots img{display:block;width:100%}.shots span{display:block;padding:3px 7px}
+.hash{font:11.5px/1.4 var(--mono);word-break:break-all;color:var(--muted)}
+ul.plain{margin:0;padding-left:18px}ul.plain li{margin:4px 0}
+dl.meta{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;margin:0}
+dl.meta dt{color:var(--muted)}dl.meta dd{margin:0}
+
+@media (max-width:760px){
+  .topbar,nav.steps{padding-left:14px;padding-right:14px}
+  nav.steps{gap:0;padding-left:6px;padding-right:6px}
+  nav.steps button{padding:10px 8px 9px;gap:6px;font-size:13px}
+  nav.steps button .n{width:18px;height:18px;font-size:11px}
+  /* wide tables restack into labelled blocks instead of forcing sideways scrolling */
+  .stack thead{display:none}
+  .stack,.stack tbody,.stack tr,.stack td{display:block;width:100%}
+  .stack tr{padding:10px 14px;border-bottom:1px solid var(--line)}
+  .stack tr:last-child{border-bottom:0}
+  .stack td{border:0;padding:2px 0}
+  .stack td[data-label]::before{content:attr(data-label) ": ";color:var(--muted);font-size:12px;font-family:var(--sans)}
+  .stack td.num,.stack td.sid{display:inline-block;width:auto;vertical-align:middle}
+  .stack td.num{padding-right:8px}
+  main{padding:14px 14px 48px}
+  .pair{grid-template-columns:1fr}
+  dl.meta{grid-template-columns:1fr;gap:0}dl.meta dt{margin-top:8px}
+  details.case>summary{flex-wrap:wrap}.grow{flex-basis:100%;white-space:normal}
+}
+@media print{.topbar,nav.steps,.btn{display:none}body{background:#fff}.panel,.build{break-inside:avoid}}
 </style>
 </head>
 <body>
-<header class="top">
-  <div><h1>PolicyReplay <span class="muted" style="font-weight:400">· Workflow Red Team</span></h1>
-  <p class="tag">Written policy → adversarial browser test → independent proof. The LLM interprets and plans; code proves.</p></div>
-  <div id="mode" class="chip">connecting…</div>
+<header class="topbar">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#1f4e8c"/><path d="M9 16.5l4.5 4.5L23 11" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><div class="name">PolicyReplay</div><div class="sub">Written policy &rarr; adversarial browser test &rarr; independent proof</div></div>
+  </div>
+  <div id="mode" class="status-chip" title="Execution environment">connecting…</div>
 </header>
-<nav class="tabs" id="tabs">
-  <button data-tab="1" class="on">1 · Policy &amp; rules</button>
-  <button data-tab="2">2 · Live run</button>
-  <button data-tab="3">3 · Evidence report</button>
+<nav class="steps" id="tabs" role="tablist" aria-label="Workflow">
+  <button role="tab" data-tab="1" aria-selected="true" aria-controls="s1"><span class="n">1</span>Policy &amp; rules</button>
+  <button role="tab" data-tab="2" aria-selected="false" aria-controls="s2"><span class="n">2</span>Live run</button>
+  <button role="tab" data-tab="3" aria-selected="false" aria-controls="s3"><span class="n">3</span>Evidence report</button>
 </nav>
 <main>
-<section id="s1">
+<section id="s1" role="tabpanel">
   <div class="panel">
-    <h2>Business policy</h2>
-    <textarea id="policy" rows="9" maxlength="4000" aria-label="Policy text"></textarea>
-    <div class="row"><button id="analyze" class="btn primary">Extract rules &amp; generate scenarios</button>
-    <span id="analyze-msg" class="small muted"></span></div>
+    <div class="ph"><h2>Business policy</h2></div>
+    <div class="pb">
+      <p class="lead">Rules are extracted from this text. Each extracted rule must quote the policy verbatim, or it is rejected.</p>
+      <textarea id="policy" rows="9" maxlength="4000" aria-label="Policy text"></textarea>
+      <div class="row"><button id="analyze" class="btn primary">Extract rules &amp; generate scenarios</button><span id="analyze-msg" class="small muted" role="status"></span></div>
+    </div>
   </div>
   <div id="analysis" hidden>
-    <div class="panel"><h2>Extracted rules <span id="src" class="chip"></span></h2>
-      <div id="rules" class="grid"></div><div id="unsupported"></div></div>
-    <div class="panel"><h2>Adversarial scenarios <span class="chip warn">human approval required</span></h2>
-      <p class="small muted" style="margin-top:0">Nothing runs until you approve. Every approved scenario runs against a buggy build and a correct build of the same app.</p>
-      <div style="overflow-x:auto"><table id="scenarios"><thead><tr><th></th><th>Test</th><th>Rule</th><th>Actor</th><th>Expected</th><th>Browser steps</th></tr></thead><tbody></tbody></table></div>
-      <div class="row"><button id="approve" class="btn">Approve selected scenarios</button>
-      <button id="run" class="btn primary" disabled>Run approved scenarios</button><span id="approve-msg" class="small muted"></span></div></div>
+    <div class="panel">
+      <div class="ph"><h2>Extracted rules</h2><span id="src" class="chip"></span></div>
+      <div class="tablewrap"><table class="tbl stack" id="rules"><thead><tr><th>Policy</th><th>Clause (verbatim from the policy)</th><th>Check</th><th>Parameters</th></tr></thead><tbody></tbody></table></div>
+      <div id="unsupported"></div>
+    </div>
+    <div class="panel">
+      <div class="ph"><h2>Adversarial scenarios</h2><span class="chip warn">Approval required before execution</span></div>
+      <div class="tablewrap"><table class="tbl stack" id="scenarios"><thead><tr><th></th><th>Scenario</th><th>Policy</th><th>Actor</th><th>Expected</th><th>Browser steps</th></tr></thead><tbody></tbody></table></div>
+      <div class="pb">
+        <p class="small muted">Approving authorizes the agent to run the selected scenarios in an isolated sandbox. Each runs once on a buggy build and once on a correct build of the same app. Nothing runs before approval.</p>
+        <div class="row"><button id="approve" class="btn">Approve selected scenarios</button>
+        <button id="run" class="btn primary" disabled>Run approved scenarios</button><span id="approve-msg" class="small muted" role="status"></span></div>
+      </div>
+    </div>
   </div>
 </section>
 
-<section id="s2" hidden>
-  <div class="panel"><h2 id="run-title">Live run</h2>
-    <p id="live-msg" class="small muted">No run yet. Approve scenarios on screen 1 and press Run.</p>
-    <div class="bar"><div id="bar"></div></div>
-    <div id="cases"></div><div id="summary" class="tiles"></div>
-    <div class="row"><button id="open-report" class="btn primary" hidden>Open evidence report</button></div></div>
+<section id="s2" role="tabpanel" hidden>
+  <div id="headline" class="headline" role="status" aria-live="polite"><div class="t">No run yet</div><div class="s">Approve scenarios on screen 1, then press Run.</div></div>
+  <div class="bar"><div id="bar"></div></div>
+  <div class="panel"><div class="ph"><h2 id="run-title">Cases</h2>
+    <div class="row" style="margin:0"><button id="expand-all" class="btn sm">Expand all</button><button id="collapse-all" class="btn sm">Collapse all</button></div></div>
+    <div class="pb"><p id="live-msg" class="small muted" style="margin-bottom:6px"></p><div id="cases"></div></div></div>
+  <div id="summary" class="tiles"></div>
+  <div id="matrix-live"></div>
+  <div class="row"><button id="open-report" class="btn primary" hidden>Open evidence report</button></div>
 </section>
 
-<section id="s3" hidden><div id="report"><div class="panel muted">The evidence report appears here after a run finishes.</div></div></section>
+<section id="s3" role="tabpanel" hidden><div id="report"><div class="panel"><div class="pb muted">The evidence report appears here after a run finishes.</div></div></div></section>
 </main>
 
 <script>
 const $=(s,r=document)=>r.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const state={analysis:null,runId:null,es:null,done:0,total:0,finished:false,report:null,approved:[]};
+const state={analysis:null,approved:[],runId:null,es:null,total:0,live:new Map(),finished:false,report:null};
+const plural=(n,w,pl)=>`${n} ${n===1?w:(pl||w+"s")}`;
+const fmtTime=t=>t?String(t).replace("T"," ").replace(/Z$/,"")+" UTC":"n/a";
+const byRuleThenTest=(x,y)=>String(x.rule_id).localeCompare(String(y.rule_id))||String(x.test_id).localeCompare(String(y.test_id));
 
 async function api(method,path,body){
   const r=await fetch(path,{method,headers:{"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
@@ -105,7 +222,7 @@ async function api(method,path,body){
   return data;
 }
 function showTab(n){
-  for(const b of document.querySelectorAll("#tabs button"))b.classList.toggle("on",b.dataset.tab===String(n));
+  for(const b of document.querySelectorAll("#tabs button"))b.setAttribute("aria-selected",String(b.dataset.tab===String(n)));
   for(const i of [1,2,3])$("#s"+i).hidden=i!==n;
 }
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>showTab(+b.dataset.tab));
@@ -114,142 +231,214 @@ function stepText(s){
   switch(s.action){
     case"login":return`login(${s.role})`;case"goto":return`goto(${s.path})`;
     case"fill":return`fill(${s.testid}=${s.value})`;case"click":return`click(${s.testid})`;
-    case"select":return`select(${s.testid}=${s.value})`;case"expect":return`expect(${s.testid}${s.text?`="${s.text}"`:""})`;
+    case"select":return`select(${s.testid}=${s.value})`;
+    case"expect":return`expect(${s.testid}${s.text?`="${s.text}"`:""})`;
     default:return s.action;}
 }
 const badge=v=>`<span class="badge ${esc(v||"PENDING")}">${esc(v||"PENDING")}</span>`;
+const buildChip=p=>`<span class="chip ${p==="buggy"?"warn":"ok"}">${p==="buggy"?"Buggy build":"Correct build"}</span>`;
 
-async function init(){
-  try{const h=await api("GET","/api/health");const el=$("#mode");
-    el.textContent=h.mode;el.className="chip "+(h.mode.startsWith("docker")?"ok":"warn");
-    if(!h.mode.startsWith("docker"))el.title="Local mode: no container isolation. Development only.";
-  }catch(e){$("#mode").textContent="API unreachable";$("#mode").className="chip bad"}
-  try{$("#policy").value=(await api("GET","/api/policy")).policy_text}catch(e){}
+/* ---------- headline figures: computed from cases, so the live view and the report always agree ---------- */
+function figures(cases,cleanup){
+  const need=new Set(cases.filter(c=>c.expected==="blocked").map(c=>c.rule_id));
+  const found=new Set(cases.filter(c=>c.profile==="buggy"&&c.verdict==="VIOLATION").map(c=>c.rule_id));
+  return{cases:cases.length,done:cases.filter(c=>c.verdict).length,need:need.size,
+    hit:[...need].filter(p=>found.has(p)).length,found:found.size,extra:[...found].filter(p=>!need.has(p)).length,
+    fp:cases.filter(c=>c.profile==="correct"&&c.verdict==="VIOLATION").length,
+    inc:cases.filter(c=>c.verdict==="INCONCLUSIVE").length,cleanup};
+}
+function finalState(f){
+  if(f.fp>0||f.hit<f.need||f.cleanup===false)return"bad";
+  if(f.inc>0||f.cleanup===null||f.extra>0||f.need===0)return"warn";
+  return"ok";
+}
+const cleanupText=c=>c===true?"all environments destroyed":c===false?"environment cleanup FAILED":"cleanup not applicable in local mode";
+function finalHeadline(f){
+  const t=f.need>0?`${f.hit} of ${plural(f.need,"policy","policies")}: planted violation detected · ${plural(f.fp,"false positive")}`
+                  :`No planted-violation scenarios were approved · ${plural(f.fp,"false positive")}`;
+  let s=`${f.cases} cases · ${f.inc} inconclusive · ${cleanupText(f.cleanup)}`;
+  if(f.extra>0)s+=` · ${plural(f.extra,"unexpected violation")} on the buggy build`;
+  return{st:finalState(f),t,s};
+}
+const headlineHTML=(st,t,s)=>`<div class="headline ${st}"><div class="t">${esc(t)}</div><div class="s">${esc(s)}</div></div>`;
+function setLiveHeadline(st,t,s){$("#headline").className="headline "+st;$("#headline").innerHTML=`<div class="t">${esc(t)}</div><div class="s">${esc(s)}</div>`}
+const liveCases=()=>[...state.live.values()];
+function updateRunningHeadline(){
+  const f=figures(liveCases(),null);
+  setLiveHeadline("run",`Running case ${Math.min(f.done+1,state.total)} of ${state.total}`,
+    `Policies with a planted violation found so far: ${f.found} · false positives so far: ${f.fp}`);
 }
 
+/* ---------- screen 1: policy, rules, approval ---------- */
+async function init(){
+  const pol=$("#policy");pol.addEventListener("input",()=>pol.dataset.touched="1");
+  try{const h=await api("GET","/api/health");const el=$("#mode");
+    el.textContent=h.mode;el.className="status-chip "+(h.mode.startsWith("docker")?"ok":"warn");
+    if(!h.mode.startsWith("docker"))el.title="Local mode: no container isolation. Development only.";
+  }catch(e){$("#mode").textContent="API unreachable";$("#mode").className="status-chip bad"}
+  try{const p=(await api("GET","/api/policy")).policy_text;if(!pol.dataset.touched&&!pol.value)pol.value=p}catch(e){}
+}
 $("#analyze").onclick=async()=>{
   const b=$("#analyze"),m=$("#analyze-msg");b.disabled=true;m.className="small muted";m.textContent="Analyzing… (a live model call can take 10–30 s)";
   try{state.analysis=await api("POST","/api/analyze",{policy_text:$("#policy").value});m.textContent="";renderAnalysis(state.analysis)}
   catch(e){m.className="small err";m.textContent=e.message}
   finally{b.disabled=false}
 };
-
 function renderAnalysis(a){
   $("#analysis").hidden=false;
-  const live=a.source.rules==="model"&&a.source.scenarios==="model";
-  const src=$("#src");
-  src.textContent=live?"live model output":(a.source.rules===a.source.scenarios?a.source.rules:`rules: ${a.source.rules} · scenarios: ${a.source.scenarios}`);
+  const live=a.source.rules==="model"&&a.source.scenarios==="model",src=$("#src");
+  src.textContent=live?"Live model output":(a.source.rules===a.source.scenarios?a.source.rules:`rules: ${a.source.rules} · scenarios: ${a.source.scenarios}`);
   src.className="chip "+(live?"ok":"warn");
-  $("#rules").innerHTML=a.rules.map(r=>`<div class="card"><b>${esc(r.rule_id)}</b> <span class="chip">${esc(r.invariant_type)}</span>
-    <blockquote>${esc(r.source_clause)}</blockquote>
-    <div class="small muted">actor: ${esc(r.actor)} · action: ${esc(r.action)}${Object.keys(r.params).length?` · params: <span class="mono">${esc(JSON.stringify(r.params))}</span>`:""}</div></div>`).join("");
-  $("#unsupported").innerHTML=a.unsupported.length?`<h3>Not tested</h3>`+a.unsupported.map(u=>
-    `<div class="small" style="margin:4px 0">${esc(u)} <span class="chip warn">no verifier yet — not tested</span></div>`).join(""):"";
-  $("#scenarios tbody").innerHTML=a.scenarios.map(s=>`<tr><td><input type="checkbox" class="pick" value="${esc(s.test_id)}" checked></td>
-    <td><b>${esc(s.test_id)}</b></td><td>${esc(s.rule_id)}</td><td>${esc(s.actor_role)}</td>
-    <td><span class="chip ${s.expected_outcome==="blocked"?"warn":"ok"}">${esc(s.expected_outcome)}</span></td>
-    <td class="mono">${s.steps.map(x=>esc(stepText(x))).join(" → ")}</td></tr>`).join("");
+  $("#rules tbody").innerHTML=a.rules.slice().sort((x,y)=>String(x.rule_id).localeCompare(String(y.rule_id))).map(r=>`<tr class="rule"><td class="sid"><b>${esc(r.rule_id)}</b></td><td>${esc(r.source_clause)}</td>
+    <td class="mono" data-label="Check">${esc(r.invariant_type)}</td><td class="mono" data-label="Parameters">${Object.keys(r.params).length?esc(JSON.stringify(r.params)):"—"}</td></tr>`).join("");
+  $("#unsupported").innerHTML=a.unsupported.length?`<div class="pb unsup"><h4>Not tested</h4>`+a.unsupported.map(u=>
+    `<div class="small">${esc(u)} <span class="chip warn">no verifier yet · not tested</span></div>`).join("")+`</div>`:"";
+  $("#scenarios tbody").innerHTML=a.scenarios.slice().sort(byRuleThenTest).map(s=>`<tr><td class="num"><input type="checkbox" class="pick" value="${esc(s.test_id)}" checked aria-label="Approve ${esc(s.test_id)}"></td>
+    <td class="sid nw"><b>${esc(s.test_id)}</b></td><td data-label="Policy">${esc(s.rule_id)}</td><td data-label="Actor">${esc(s.actor_role)}</td>
+    <td data-label="Expected"><span class="chip">${esc(s.expected_outcome)}</span></td>
+    <td class="mono" data-label="Steps">${s.steps.map(x=>esc(stepText(x))).join(" → ")}</td></tr>`).join("");
   $("#run").disabled=true;$("#approve-msg").textContent="";
 }
-
 $("#approve").onclick=async()=>{
   const ids=[...document.querySelectorAll(".pick:checked")].map(x=>x.value),m=$("#approve-msg");
-  if(!ids.length){m.className="small err";m.textContent="Select at least one scenario.";return}
+  if(!ids.length){m.className="small err";m.style.color="";m.textContent="Select at least one scenario.";return}
   try{const r=await api("POST",`/api/analyses/${state.analysis.analysis_id}/approve`,{test_ids:ids});
-    state.approved=r.approved;m.className="small";m.style.color="var(--green)";m.textContent=`Approved ${r.approved.length} scenario(s) at ${r.approved_at} (UTC)`;$("#run").disabled=false}
-  catch(e){m.className="small err";m.textContent=e.message}
+    state.approved=r.approved;m.className="small";m.style.color="var(--ok)";
+    m.textContent=`Approved ${plural(r.approved.length,"scenario")} (${r.approved.length*2} cases) at ${fmtTime(r.approved_at)}`;$("#run").disabled=false}
+  catch(e){m.className="small err";m.style.color="";m.textContent=e.message}
 };
 $("#run").onclick=async()=>{
   const m=$("#approve-msg");
-  try{const r=await api("POST","/api/runs",{analysis_id:state.analysis.analysis_id,test_ids:state.approved});
-    showTab(2);startStream(r.run_id)}
+  try{const r=await api("POST","/api/runs",{analysis_id:state.analysis.analysis_id,test_ids:state.approved});showTab(2);startStream(r.run_id)}
   catch(e){m.className="small err";m.style.color="";m.textContent=e.message}
 };
 
+/* ---------- screen 2: live run ---------- */
 function startStream(runId){
   if(state.es)state.es.close();
-  Object.assign(state,{runId,done:0,total:0,finished:false,report:null});
-  $("#cases").innerHTML="";$("#summary").innerHTML="";$("#bar").style.width="0%";$("#open-report").hidden=true;
-  $("#report").innerHTML='<div class="panel muted">The evidence report appears here after a run finishes.</div>';
-  $("#run-title").textContent="Live run "+runId;$("#live-msg").className="small muted";$("#live-msg").textContent="Starting…";
+  Object.assign(state,{runId,total:0,finished:false,report:null});state.live=new Map();
+  $("#cases").innerHTML="";$("#summary").innerHTML="";$("#matrix-live").innerHTML="";$("#bar").style.width="0%";$("#open-report").hidden=true;
+  $("#report").innerHTML='<div class="panel"><div class="pb muted">The evidence report appears here after a run finishes.</div></div>';
+  $("#run-title").textContent="Cases · run "+runId;$("#live-msg").className="small muted";$("#live-msg").textContent="Starting…";
+  setLiveHeadline("run","Starting run…","Preparing the isolated environment.");
   const es=new EventSource(`/api/runs/${runId}/events`);state.es=es;
   const on=(t,f)=>es.addEventListener(t,e=>f(JSON.parse(e.data)));
-  const log=(cid,cls,text)=>{const u=document.getElementById("log-"+cid);if(u){const li=document.createElement("li");li.className=cls;li.textContent=text;u.appendChild(li)}};
-  on("run_started",d=>{state.total=d.total;$("#live-msg").textContent=`Running ${d.total} cases · mode: ${d.mode}`});
-  on("case_started",d=>{const div=document.createElement("div");div.className="case";
-    div.innerHTML=`<div class="hd"><span><b>${esc(d.test_id)}</b> · <span class="chip ${d.profile==="buggy"?"warn":"ok"}">${esc(d.profile)} build</span> <span class="muted small">${esc(d.rule_id)}</span></span><span id="v-${esc(d.case_id)}">${badge()}</span></div><ul id="log-${esc(d.case_id)}"></ul>`;
-    $("#cases").appendChild(div)});
+  const det=cid=>document.getElementById("live-"+cid);
+  const log=(cid,cls,text)=>{const d=det(cid),u=d&&d.querySelector("ul");if(u){const li=document.createElement("li");li.className=cls;li.textContent=text;u.appendChild(li)}};
+  on("run_started",d=>{state.total=d.total;$("#live-msg").textContent=`${d.total} cases · execution: ${d.mode}`;updateRunningHeadline()});
+  on("case_started",d=>{
+    const sc=(state.analysis.scenarios||[]).find(s=>s.test_id===d.test_id);
+    state.live.set(d.case_id,{case_id:d.case_id,test_id:d.test_id,rule_id:d.rule_id,profile:d.profile,expected:sc?sc.expected_outcome:null,verdict:null,cleanup:null});
+    const el=document.createElement("details");el.className="case";el.id="live-"+d.case_id;el.open=true;
+    el.innerHTML=`<summary><span class="chev"></span><span class="tid">${esc(d.test_id)}</span>${buildChip(d.profile)}<span class="grow" id="why-${esc(d.case_id)}">running…</span><span id="v-${esc(d.case_id)}">${badge()}</span></summary><ul class="log"></ul>`;
+    el.querySelector("summary").addEventListener("click",()=>el.dataset.user="1");
+    $("#cases").appendChild(el);updateRunningHeadline()});
   on("stage",d=>log(d.case_id,"",`• ${d.text}`));
   on("step",d=>log(d.case_id,d.ok?"ok":"bad",`${d.ok?"✓":"✗"} step ${d.n}: ${d.action} ${d.detail||""}${d.error?" — "+d.error:""}`));
-  on("verdict",d=>{const el=document.getElementById("v-"+d.case_id);if(el)el.innerHTML=badge(d.verdict);log(d.case_id,d.verdict==="INCONCLUSIVE"?"bad":"ok",`→ ${d.verdict}: ${(d.reasons||[]).join(" ")}`)});
-  on("cleanup",d=>log(d.case_id,d.confirmed?"ok":"bad",`${d.confirmed?"✓":"✗"} environment cleanup ${d.confirmed?"confirmed":"FAILED"}`));
-  on("case_finished",()=>{state.done++;$("#bar").style.width=(100*state.done/Math.max(state.total,1))+"%"});
-  on("run_finished",async d=>{state.finished=true;es.close();$("#live-msg").textContent="Run finished.";renderSummary(d.summary);await loadReport()});
-  on("run_failed",d=>{state.finished=true;es.close();$("#live-msg").className="small err";$("#live-msg").textContent="Run failed: "+d.error});
+  on("verdict",d=>{const c=state.live.get(d.case_id);if(c)c.verdict=d.verdict;
+    const v=document.getElementById("v-"+d.case_id);if(v)v.innerHTML=badge(d.verdict);
+    const w=document.getElementById("why-"+d.case_id);if(w){w.textContent=(d.reasons||[]).join(" ");w.title=w.textContent}
+    log(d.case_id,d.verdict==="INCONCLUSIVE"?"bad":"ok",`→ ${d.verdict}: ${(d.reasons||[]).join(" ")}`);updateRunningHeadline()});
+  on("cleanup",d=>{const c=state.live.get(d.case_id);if(c)c.cleanup=d.confirmed;log(d.case_id,d.confirmed?"ok":"bad",`${d.confirmed?"✓":"✗"} environment cleanup ${d.confirmed?"confirmed":"FAILED"}`)});
+  on("case_finished",d=>{const e=det(d.case_id);if(e&&!e.dataset.user)e.open=false;
+    $("#bar").style.width=(100*liveCases().filter(c=>c.verdict).length/Math.max(state.total,1))+"%"});
+  on("run_finished",async()=>{state.finished=true;es.close();$("#live-msg").textContent="Run finished.";
+    const cs=liveCases(),seen=cs.filter(c=>c.cleanup!==null),cl=seen.length?seen.every(c=>c.cleanup===true):null;
+    const f=figures(cs,cl),h=finalHeadline(f);setLiveHeadline(h.st,h.t,h.s);renderTiles(f);await loadReport()});
+  on("run_failed",d=>{state.finished=true;es.close();$("#live-msg").className="small err";$("#live-msg").textContent="Run failed: "+d.error;setLiveHeadline("bad","Run failed",d.error)});
   es.onerror=()=>{if(!state.finished)$("#live-msg").textContent="Connection interrupted, reconnecting…"};
 }
-function renderSummary(s){
-  const clean=s.cleanup_confirmed===null?"n/a (local mode)":(s.cleanup_confirmed?"yes":"NO");
+$("#expand-all").onclick=()=>document.querySelectorAll("#cases details.case").forEach(d=>{d.open=true;d.dataset.user="1"});
+$("#collapse-all").onclick=()=>document.querySelectorAll("#cases details.case").forEach(d=>{d.open=false;d.dataset.user="1"});
+function renderTiles(f){
+  const clean=f.cleanup===null?"n/a":(f.cleanup?"Yes":"No");
   $("#summary").innerHTML=[
-    [s.planted_violations_detected,"planted violations detected (buggy build)",s.planted_violations_detected>0?"ok":"warn"],
-    [s.false_positives_on_correct_build,"false positives on the correct build",s.false_positives_on_correct_build===0?"ok":"bad"],
-    [s.inconclusive,"inconclusive",s.inconclusive===0?"ok":"warn"],
-    [clean,"all environments destroyed",s.cleanup_confirmed===false?"bad":(s.cleanup_confirmed?"ok":"warn")]
-  ].map(t=>`<div class="tile"><b class="${t[2]==="ok"?"":""}">${esc(t[0])}</b><span class="small muted">${esc(t[1])}</span> <span class="chip ${t[2]}">${t[2]==="ok"?"ok":t[2]==="bad"?"check":"note"}</span></div>`).join("");
+    [`${f.hit}<span> of ${f.need}</span>`,"planted violations detected (policies)"],
+    [f.fp,"false positives on the correct build"],[f.inc,"inconclusive verdicts"],[clean,"environments destroyed"]
+  ].map(t=>`<div class="tile"><div class="v">${t[0]}</div><div class="k">${esc(t[1])}</div></div>`).join("");
 }
 $("#open-report").onclick=()=>showTab(3);
 
+/* ---------- screen 3: evidence report ---------- */
 async function loadReport(){
-  try{state.report=await api("GET",`/api/runs/${state.runId}/report`);renderReport(state.report);$("#open-report").hidden=false}
-  catch(e){$("#report").innerHTML=`<div class="panel err">Could not load report: ${esc(e.message)}</div>`}
+  try{state.report=await api("GET",`/api/runs/${state.runId}/report`);renderReport(state.report);
+    $("#matrix-live").innerHTML=matrixHTML(state.report.cases);bindCells();$("#open-report").hidden=false}
+  catch(e){$("#report").innerHTML=`<div class="panel"><div class="pb err">Could not load report: ${esc(e.message)}</div></div>`}
 }
-function kv(o){return Object.entries(o||{}).map(([k,v])=>`${esc(k)}: ${esc(typeof v==="object"?JSON.stringify(v):v)}`).join("\n")}
+function matrixHTML(cases){
+  const groups=new Map();
+  for(const c of cases.slice().sort((x,y)=>byRuleThenTest({rule_id:x.rule.rule_id,test_id:x.test_id},{rule_id:y.rule.rule_id,test_id:y.test_id}))){const g=groups.get(c.rule.rule_id)||{clause:c.policy_clause,tests:new Map()};groups.set(c.rule.rule_id,g);
+    const t=g.tests.get(c.test_id)||{};g.tests.set(c.test_id,t);t[c.profile]=c}
+  const cell=c=>c?`<button class="cell" data-case="${esc(c.case_id)}" title="Open evidence">${badge(c.verdict)}</button>`:"—";
+  let h=`<div class="panel"><div class="ph"><h2>Results by policy</h2></div><div class="tablewrap"><table class="tbl matrix"><thead><tr><th>Policy and scenario</th><th>Buggy build (planted bug)</th><th>Correct build (control)</th></tr></thead><tbody>`;
+  for(const [rid,g] of groups){
+    h+=`<tr class="grp"><td colspan="3">${esc(rid)} <span class="clause">· ${esc(g.clause)}</span></td></tr>`;
+    for(const [tid,t] of g.tests)h+=`<tr><td class="nw">${esc(tid)}</td><td>${cell(t.buggy)}</td><td>${cell(t.correct)}</td></tr>`;
+  }
+  return h+`</tbody></table></div><div class="pb small muted">On the buggy build, VIOLATION means the planted bug was detected, which is the expected result. On the correct build, PASS means the control behaved correctly. Select a verdict to open its evidence.</div></div>`;
+}
+function bindCells(){document.querySelectorAll(".cell").forEach(b=>b.onclick=()=>openCase(b.dataset.case))}
+function openCase(cid){
+  showTab(3);const d=document.getElementById("ev-"+cid);
+  if(d){d.open=true;(document.getElementById("case-"+cid)||d).scrollIntoView({block:"center"})}
+}
+function kvRows(o){return Object.entries(o||{}).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${typeof v==="boolean"?(v?"✓ yes":"✗ no"):esc(typeof v==="object"?JSON.stringify(v):v)}</td></tr>`).join("")}
+function hardening(env){
+  const c=(env&&env.containment)||{},a=c.app,w=c.worker;if(!a&&!w)return"";
+  const mb=b=>b?Math.round(b/1048576)+" MB":"n/a";
+  const row=(k,f)=>`<tr><td>${esc(k)}</td>${[a,w].map(x=>`<td>${esc(x?f(x):"n/a")}</td>`).join("")}</tr>`;
+  return`<h4>Container hardening (recorded from docker inspect)</h4><div class="tablewrap"><table class="tbl kv"><thead><tr><th>Setting</th><th>Target app</th><th>Browser worker</th></tr></thead><tbody>
+    ${row("Root filesystem",x=>x.ReadonlyRootfs?"read-only":"writable")}
+    ${row("Linux capabilities",x=>(x.CapDrop||[]).includes("ALL")?"all dropped":((x.CapDrop||[]).join(", ")||"default"))}
+    ${row("Privilege escalation",x=>(x.SecurityOpt||[]).includes("no-new-privileges")?"blocked (no-new-privileges)":"not restricted")}
+    ${row("Process limit",x=>x.PidsLimit)}${row("Memory limit",x=>mb(x.MemoryBytes))}
+    ${row("CPU limit",x=>x.NanoCpus?(x.NanoCpus/1e9)+" CPU":"n/a")}${row("User",x=>x.User||"n/a")}
+  </tbody></table></div><p class="small muted" style="margin-top:6px">Network: ${c.network_internal==="true"?"internal only, no external egress":"NOT confirmed internal"} · containers left behind: ${(env.leftovers||[]).length?esc(env.leftovers.join(", ")):"none"}</p>`;
+}
 function envBlock(env){
   if(!env)return"";
-  let h=`<h3>Environment</h3><div class="small">mode: <b>${esc(env.mode)}</b>`;
+  let h=`<h4>Environment</h4><p class="small">Mode: <b>${esc(env.mode)}</b>`;
   if(env.cleanup_confirmed!==undefined)h+=` · cleanup <span class="chip ${env.cleanup_confirmed?"ok":"bad"}">${env.cleanup_confirmed?"confirmed":"FAILED"}</span>`;
-  h+=`</div>`;
-  if(env.note)h+=`<div class="small muted">${esc(env.note)}</div>`;
-  const c=env.containment||{};
-  if(c.app||c.worker){h+=`<pre>network internal: ${esc(c.network_internal)}\napp:    ${esc(JSON.stringify(c.app))}\nworker: ${esc(JSON.stringify(c.worker))}</pre>`}
-  return h;
+  h+=`</p>`;if(env.note)h+=`<p class="small muted">${esc(env.note)}</p>`;
+  return h+hardening(env);
 }
 function buildCard(c){
   const trace=(c.trace||[]).map(s=>`${s.ok?"✓":"✗"} ${s.step}. ${stepText(s)}${s.error?" — "+s.error:""}`).join("\n");
-  const shots=(c.trace||[]).filter(s=>s.screenshot).map(s=>`<a href="${esc(s.screenshot)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(s.screenshot)}" alt="step ${esc(s.step)}"><span>step ${esc(s.step)} · ${esc(s.action)}</span></a>`).join("");
-  const hashes=Object.entries({...(c.artifact_sha256||{}),...(c.manifest_sha256||{})}).map(([k,v])=>`${k}  ${v}`).join("\n");
-  return `<div class="card"><div><span class="chip ${c.profile==="buggy"?"warn":"ok"}">${esc(c.profile)} build</span> ${badge(c.verdict)}</div>
-   <p class="small" style="margin:8px 0">${esc((c.reasons||[]).join(" "))}</p>
-   <details><summary>Evidence</summary>
-     <h3>Browser actions</h3><pre>${esc(trace)||"(none)"}</pre>
-     ${shots?`<div class="shots">${shots}</div>`:""}
-     <h3>Verification checks</h3><pre>${esc(kv(c.checks))}</pre>
-     <h3>Observed application state</h3><pre>${esc(JSON.stringify(c.observed,null,2))}</pre>
-     <h3>Artifact hashes (sha256)</h3><pre>${esc(hashes)||"(none)"}</pre>
+  const shots=(c.trace||[]).filter(s=>s.screenshot).map(s=>`<a href="${esc(s.screenshot)}" target="_blank" rel="noopener"><img loading="lazy" src="${esc(s.screenshot)}" alt="Step ${esc(s.step)} screenshot"><span>Step ${esc(s.step)} · ${esc(s.action)}</span></a>`).join("");
+  const hashes=Object.entries({...(c.artifact_sha256||{}),...(c.manifest_sha256||{})}).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="hash">${esc(v)}</td></tr>`).join("");
+  return`<div class="build" id="case-${esc(c.case_id)}"><div class="h">${buildChip(c.profile)}${badge(c.verdict)}</div>
+   <p class="reason small">${esc((c.reasons||[]).join(" "))}</p>
+   <details id="ev-${esc(c.case_id)}"><summary>Evidence</summary>
+     <h4>Browser actions</h4><pre>${esc(trace)||"(none)"}</pre>${shots?`<div class="shots">${shots}</div>`:""}
+     <h4>Verification checks</h4><div class="tablewrap"><table class="tbl kv"><tbody>${kvRows(c.checks)||"<tr><td colspan=2>(none)</td></tr>"}</tbody></table></div>
+     <h4>Observed application state</h4><pre>${esc(JSON.stringify(c.observed,null,2))}</pre>
+     <h4>Artifact hashes (sha256)</h4><div class="tablewrap"><table class="tbl kv"><tbody>${hashes||"<tr><td colspan=2>(none)</td></tr>"}</tbody></table></div>
      ${envBlock(c.environment)}
    </details></div>`;
 }
 function renderReport(rep){
-  const cases=rep.cases||[];
-  const flag=cases.find(c=>c.verdict==="VIOLATION"&&c.profile==="buggy"&&c.rule&&c.rule.rule_id==="P-01")||cases.find(c=>c.verdict==="VIOLATION");
-  let h="";
-  if(flag)h+=`<div class="banner"><div class="big">The policy said no. The application said yes. PolicyReplay proved it.</div>
-    <blockquote>${esc(flag.policy_clause)}</blockquote><div class="small">${esc((flag.reasons||[]).join(" "))}</div></div>`;
-  const s=rep.summary;
-  h+=`<div class="panel"><h2>Evidence report <span class="muted small">run ${esc(rep.run_id)}</span></h2>
-    <div class="small muted">execution: ${esc(rep.execution_mode)} · model output: rules ${esc(rep.model_output.rules)}, scenarios ${esc(rep.model_output.scenarios)} · human approval: ${esc(rep.human_approved_at||"n/a")}</div>
-    ${s?`<div class="small" style="margin-top:6px">${esc(s.planted_violations_detected)} planted violation(s) detected · ${esc(s.false_positives_on_correct_build)} false positive(s) on the correct build · ${esc(s.inconclusive)} inconclusive</div>`:""}
-    <div class="row"><a class="btn" href="/api/runs/${esc(rep.run_id)}/report" target="_blank" rel="noopener">Download report (JSON)</a></div></div>`;
-  const byTest={};for(const c of cases)(byTest[c.test_id]=byTest[c.test_id]||[]).push(c);
-  for(const [tid,cs] of Object.entries(byTest)){
-    const first=cs[0];
-    h+=`<div class="panel"><h2>${esc(tid)} <span class="muted small">${esc(first.rule.rule_id)}</span></h2>
+  const cases=(rep.cases||[]).slice().sort((x,y)=>byRuleThenTest({rule_id:x.rule.rule_id,test_id:x.test_id},{rule_id:y.rule.rule_id,test_id:y.test_id}));
+  const envs=cases.map(c=>c.environment&&c.environment.cleanup_confirmed).filter(v=>typeof v==="boolean");
+  const f=figures(cases.map(c=>({rule_id:c.rule.rule_id,profile:c.profile,verdict:c.verdict,expected:c.scenario.expected_outcome})),envs.length?envs.every(Boolean):null);
+  const hd=finalHeadline(f);
+  const flag=cases.find(c=>c.verdict==="VIOLATION"&&c.profile==="buggy"&&c.rule.rule_id==="P-01")||cases.find(c=>c.verdict==="VIOLATION"&&c.profile==="buggy");
+  let h=`<div id="headline-report">${headlineHTML(hd.st,hd.t,hd.s)}</div>`;
+  if(flag)h+=`<div class="banner"><div class="lbl">Finding · ${esc(flag.rule.rule_id)}</div><div class="big">The policy said no. The application said yes. PolicyReplay proved it.</div>
+    <blockquote>${esc(flag.policy_clause)}</blockquote><p class="small" style="margin-top:8px">${esc((flag.reasons||[]).join(" "))}</p></div>`;
+  h+=`<div class="panel"><div class="ph"><h2>Run details</h2><a class="btn sm" href="/api/runs/${esc(rep.run_id)}/report" target="_blank" rel="noopener">Download report (JSON)</a></div><div class="pb"><dl class="meta">
+    <dt>Run</dt><dd class="mono">${esc(rep.run_id)}</dd><dt>Execution</dt><dd>${esc(rep.execution_mode)}</dd>
+    <dt>Rules</dt><dd>${esc(rep.model_output.rules)}</dd><dt>Scenarios</dt><dd>${esc(rep.model_output.scenarios)}</dd>
+    <dt>Human approval</dt><dd>${esc(fmtTime(rep.human_approved_at))}</dd></dl></div></div>`;
+  h+=matrixHTML(cases);
+  const byTest=new Map();for(const c of cases){if(!byTest.has(c.test_id))byTest.set(c.test_id,[]);byTest.get(c.test_id).push(c)}
+  for(const [tid,cs] of byTest){const first=cs[0];
+    h+=`<div class="panel"><div class="ph"><h2>${esc(tid)} <span class="muted small">· ${esc(first.rule.rule_id)}</span></h2><span class="chip">expected: ${esc(first.scenario.expected_outcome)}</span></div><div class="pb">
       <blockquote>${esc(first.policy_clause)}</blockquote>
-      <div class="small muted">actor: ${esc(first.scenario.actor_role)} · expected: ${esc(first.scenario.expected_outcome)} · plan: <span class="mono">${first.scenario.steps.map(x=>esc(stepText(x))).join(" → ")}</span></div>
-      <div class="pair" style="margin-top:10px">${["buggy","correct"].map(p=>{const c=cs.find(x=>x.profile===p);return c?buildCard(c):""}).join("")}</div></div>`;
+      <p class="small muted" style="margin-top:8px">Actor: ${esc(first.scenario.actor_role)} · Plan: <span class="mono">${first.scenario.steps.map(x=>esc(stepText(x))).join(" → ")}</span></p>
+      <div class="pair">${["buggy","correct"].map(p=>{const c=cs.find(x=>x.profile===p);return c?buildCard(c):""}).join("")}</div></div></div>`;
   }
-  h+=`<div class="panel"><h2>Limitations</h2><ul class="small">${(rep.limitations||[]).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>`;
-  $("#report").innerHTML=h;
+  h+=`<div class="panel"><div class="ph"><h2>Limitations</h2></div><div class="pb"><ul class="plain small">${(rep.limitations||[]).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div></div>`;
+  $("#report").innerHTML=h;bindCells();
 }
 init();
 </script>

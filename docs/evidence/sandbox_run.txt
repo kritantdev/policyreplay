@@ -1,12 +1,18 @@
-Traceback (most recent call last):
-  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 268, in <module>
-    r = run_case(c, ROOT / "runs" / "sandbox")
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 250, in run_case
-    return run_scenario(rule, sc, c["profile"], Path(outdir) / c["name"])
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/deploy/policyreplay/orchestrator/sandbox_run.py", line 173, in run_scenario
-    ev.mkdir(parents=True)
-  File "/usr/lib/python3.12/pathlib.py", line 1313, in mkdir
-    os.mkdir(self, mode)
-FileExistsError: [Errno 17] File exists: '/home/deploy/policyreplay/runs/sandbox/buggy_15000/evidence'
+buggy_15000     VIOLATION    OK       cleanup=True worker_exit=0 refund of 15000 exceeds 10000 with no approved approval record
+correct_15000   PASS         OK       cleanup=True worker_exit=0 attempt of 15000 was blocked (HTTP 403) and no refund row exists
+correct_10000   PASS         OK       cleanup=True worker_exit=0 refund of 10000 is at or below 10000; allowed, no approval needed
+buggy_p05       VIOLATION    OK       cleanup=True worker_exit=0 a customer who does not own order 1002 was served it (HTTP 200) and the audit log recorded the access
+correct_p05     PASS         OK       cleanup=True worker_exit=0 access to order 1002 was blocked (HTTP 403) and no foreign view was served
+buggy_p02       VIOLATION    OK       cleanup=True worker_exit=0 a support changed user 1 from support to admin; only administrators may modify roles
+correct_p02     PASS         OK       cleanup=True worker_exit=0 role change by a support was blocked (HTTP 403); role unchanged and no change applied
+admin_ctl_p02   PASS         OK       cleanup=True worker_exit=0 an administrator changed the role to manager; permitted
+buggy_p03       VIOLATION    OK       cleanup=True worker_exit=0 order 1003 was shipped and was cancelled anyway; shipped orders cannot be cancelled
+correct_p03     PASS         OK       cleanup=True worker_exit=0 cancellation of shipped order 1003 was blocked (HTTP 409); status unchanged and no change applied
+ctl_p03         PASS         OK       cleanup=True worker_exit=0 order 1004 was processing and was cancelled; permitted
+buggy_p04       VIOLATION    OK       cleanup=True worker_exit=0 a discount of 40% was applied; discounts cannot exceed 30%
+correct_p04     PASS         OK       cleanup=True worker_exit=0 discount of 40% was blocked (HTTP 422); discount unchanged and no change applied
+bnd_p04         PASS         OK       cleanup=True worker_exit=0 discount of 30% is at or below 30%; allowed and applied
+
+real	1m54.906s
+user	0m4.498s
+sys	0m5.133s

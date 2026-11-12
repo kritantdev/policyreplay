@@ -1,0 +1,15 @@
+source: {'rules': 'model', 'scenarios': 'model'}
+RULE P-01 [approval_required_over_threshold] {'threshold': 10000}  <- "Refunds above INR 10,000 require manager approval. Support staff may issue smaller refunds directly."
+RULE P-02 [role_change_admin_only] {}  <- "Only administrators can modify user roles."
+RULE P-03 [no_cancel_after_ship] {}  <- "Shipped orders cannot be cancelled."
+RULE P-04 [max_discount_pct] {'max_percent': 30}  <- "Discounts cannot exceed 30%."
+RULE P-05 [owner_only_access] {}  <- "Customers cannot access another customer's order."
+SCENARIO P-01-ADV-001 (P-01) expect=blocked steps=4
+SCENARIO P-01-BND-001 (P-01) expect=allowed steps=4
+SCENARIO P-02-ADV-001 (P-02) expect=blocked steps=4
+SCENARIO P-02-CTL-001 (P-02) expect=allowed steps=4
+SCENARIO P-03-ADV-001 (P-03) expect=blocked steps=3
+SCENARIO P-03-CTL-001 (P-03) expect=allowed steps=3
+SCENARIO P-04-ADV-001 (P-04) expect=blocked steps=4
+SCENARIO P-04-BND-001 (P-04) expect=allowed steps=4
+SCENARIO P-05-ADV-001 (P-05) expect=blocked steps=2

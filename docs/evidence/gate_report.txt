@@ -1,15 +1,19 @@
 finished (local time) run           cases planted false+ inconcl mode   cleanup clean
-2026-11-07 00:06:14   be789c8d9dee  10    3       0      0       docker True    YES
-2026-11-07 00:34:29   302a3ac85c8d  10    3       0      0       docker True    YES
-2026-11-07 01:11:54   0a8ceb5ae592  10    3       0      0       docker True    YES
-2026-11-07 01:27:53   a23acce7dd3b  10    3       0      0       docker True    YES
-2026-11-07 03:48:37   e5f73dd3eb2f  10    3       0      0       docker True    YES
+2026-11-08 01:31:46   7329321fdfe4  20    6       0      0       docker True    YES
+2026-11-08 06:06:08   bc71d8b9e128  18    5       0      0       docker True    YES
+2026-11-08 11:24:22   5ec891f2dfa8  18    5       0      0       docker True    YES
+2026-11-08 11:29:43   8304324590b7  18    5       0      0       docker True    YES
+2026-11-08 17:20:37   a18c7e83f987  18    5       0      0       docker True    YES
+2026-11-08 17:33:18   9df9ee19700e  18    5       0      0       docker True    YES
+2026-11-09 01:24:24   2267e66af6c3  18    5       0      0       docker True    YES
+2026-11-10 13:35:52   372e7241d5dd  20    6       0      0       docker True    YES
+2026-11-11 06:56:58   ec675d77a4ac  18    5       0      0       docker True    YES
 
-consecutive clean docker runs at the end: 5   (v3 gate: 3)
+consecutive clean docker runs at the end: 9   (v3 gate: 3)
 
-containment evidence from run e5f73dd3eb2f, case P-05-ADV-001__correct:
+containment evidence from run ec675d77a4ac, case P-05-ADV-001__correct:
 {
-  "run_id": "a1e15ad3",
+  "run_id": "7f0c78c1",
   "containment": {
     "network_internal": "true",
     "app": {
@@ -23,7 +27,7 @@ containment evidence from run e5f73dd3eb2f, case P-05-ADV-001__correct:
       "PidsLimit": 128,
       "MemoryBytes": 268435456,
       "NanoCpus": 500000000,
-      "NetworkMode": "pr-net-a1e15ad3",
+      "NetworkMode": "pr-net-7f0c78c1",
       "User": "10001"
     },
     "worker": {
@@ -37,7 +41,7 @@ containment evidence from run e5f73dd3eb2f, case P-05-ADV-001__correct:
       "PidsLimit": 256,
       "MemoryBytes": 1073741824,
       "NanoCpus": 1000000000,
-      "NetworkMode": "pr-net-a1e15ad3",
+      "NetworkMode": "pr-net-7f0c78c1",
       "User": "10001"
     }
   },

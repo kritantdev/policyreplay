@@ -1,0 +1,19 @@
+run: ec675d77a4ac
+P-01-ADV-001__buggy            VIOLATION    cleanup=True  refund of 10001 exceeds 10000 with no approved approval record
+P-01-ADV-001__correct          PASS         cleanup=True  attempt of 10001 was blocked (HTTP 403) and no refund row exists
+P-01-BND-001__buggy            PASS         cleanup=True  refund of 10000 is at or below 10000; allowed, no approval needed
+P-01-BND-001__correct          PASS         cleanup=True  refund of 10000 is at or below 10000; allowed, no approval needed
+P-02-ADV-001__buggy            VIOLATION    cleanup=True  a support changed user 1 from support to admin; only administrators may modify roles
+P-02-ADV-001__correct          PASS         cleanup=True  role change by a support was blocked (HTTP 403); role unchanged and no change applied
+P-02-CTL-001__buggy            PASS         cleanup=True  an administrator changed the role to manager; permitted
+P-02-CTL-001__correct          PASS         cleanup=True  an administrator changed the role to manager; permitted
+P-03-ADV-001__buggy            VIOLATION    cleanup=True  order 1003 was shipped and was cancelled anyway; shipped orders cannot be cancelled
+P-03-ADV-001__correct          PASS         cleanup=True  cancellation of shipped order 1003 was blocked (HTTP 409); status unchanged and no change 
+P-03-CTL-001__buggy            PASS         cleanup=True  order 1004 was processing and was cancelled; permitted
+P-03-CTL-001__correct          PASS         cleanup=True  order 1004 was processing and was cancelled; permitted
+P-04-ADV-001__buggy            VIOLATION    cleanup=True  a discount of 40% was applied; discounts cannot exceed 30%
+P-04-ADV-001__correct          PASS         cleanup=True  discount of 40% was blocked (HTTP 422); discount unchanged and no change applied
+P-04-BND-001__buggy            PASS         cleanup=True  discount of 30% is at or below 30%; allowed and applied
+P-04-BND-001__correct          PASS         cleanup=True  discount of 30% is at or below 30%; allowed and applied
+P-05-ADV-001__buggy            VIOLATION    cleanup=True  a customer who does not own order 1002 was served it (HTTP 200) and the audit log recorded
+P-05-ADV-001__correct          PASS         cleanup=True  access to order 1002 was blocked (HTTP 403) and no foreign view was served

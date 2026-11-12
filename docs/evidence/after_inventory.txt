@@ -1,3 +1,7 @@
+== docker ps -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+
+== docker network ls
 NETWORK ID     NAME      DRIVER    SCOPE
 c8af624fbb8c   bridge    bridge    local
 7dfc8abd9712   host      host      local

@@ -1,0 +1,9 @@
+captured (UTC): 2026-11-12T05:16:17Z
+commit:  1880abc357609cf9e04b7d4c35666662921b67ec
+subject: UI polish: headline, collapsible logs, results matrix; deploy files and cap setting
+kernel:  Linux 6.8.0-147-generic
+docker:  Docker version 29.9.3, build 5457199
+python:  Python 3.12.3
+text model: minimax-m3.1-flash
+PR_RUN_MODE=docker
+PR_DAILY_MODEL_CALLS=200

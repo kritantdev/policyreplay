@@ -7,10 +7,10 @@ e-commerce app inside a hardened sandbox on Vultr, and uses **deterministic Pyth
 was violated. The LLM interprets and plans; **code proves**. No model output can create a VIOLATION on its own.
 
 - **Built for:** Vultr Agent Rush (3 to 8 Nov 2026), challenge 01 *Blast Radius Zero*: an agent that operates a browser, with every action inside an isolated sandbox on Vultr
-- **Live demo:** https://139-84-216-65.sslip.io/ (runs on promotional cloud credit, so it may be taken offline)
+- **Live demo:** taken offline after the hackathon to avoid hosting costs. During the event it ran on a Vultr VM at `139-84-216-65.sslip.io` (that address no longer belongs to this project). The runs it produced are kept in [`docs/evidence/`](docs/evidence/), and the steps below rebuild it.
 - **License:** MIT
 
-This repository is a hackathon build, not a maintained product.
+This repository is a hackathon build, not a maintained product. Everything needed to rebuild the deployment is in the repository.
 
 ## Results at a glance
 
@@ -163,7 +163,7 @@ Tested with `python orchestrator/sandbox_run.py probe`, `stress` and `run`:
 - The live view shows each case's browser steps after that case finishes, not click by click.
 - Not built: PDF policy upload and a vision-model review of screenshots.
 
-### Public demo safety
+### Public demo safety (as it was while the demo was online)
 
 Fixed sample policy and fixed target app only; policy text capped at 4,000 characters; per-IP rate limits (20 analyses
 and 10 runs per hour); one concurrent run; a configurable daily cap on model calls (after which cached output is used
